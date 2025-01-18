@@ -41,17 +41,38 @@ jobs:
           golangci-lint run -v --timeout 5m && \
           go test -v -race ./...
 
+      - name: Get app url
+        uses: akhileshns/heroku-deploy@v3.13.15
+        with:
+          heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+          heroku_app_name: ""
+          heroku_email: ${{ secrets.HEROKU_USER_EMAIL }}
+          justlogin: true
+
+      - name: Export app config
+        id: export_app_config
+        run: |
+          HEROKU_APP_URL=$(heroku apps:info --app="${{ secrets.HEROKU_APP_NAME }}" --json | jq -r '.app.web_url | rtrimstr("/")')
+
+          cat <<EOF >> "$GITHUB_OUTPUT"
+          HEROKU_APP_URL=$HEROKU_APP_URL
+          EOF
+
       - name: Deploy to Heroku
         uses: akhileshns/heroku-deploy@v3.13.15
         with:
           heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
           heroku_app_name: ${{ secrets.HEROKU_APP_NAME }}
           heroku_email: ${{ secrets.HEROKU_USER_EMAIL }}
+          healthcheck: "${{ steps.export_app_config.outputs.HEROKU_APP_URL }}/health"
           rollbackonhealthcheckfailed: true
           usedocker: true
           delay: 5
         env:
-          HD_KAGI_SESSION: ${{ secrets.KAGI_SESSION_TOKEN }}
+          HD_KAGI_SESSION_TOKEN: ${{ secrets.KAGI_SESSION_TOKEN }}
+          HD_KAGI_SESSION_SECRET: ${{ secrets.KAGI_SESSION_SECRET }}
+          HD_KAGI_SESSION_USER: ${{ secrets.KAGI_SESSION_USER }}
+          HD_KAGI_SESSION_PASS: ${{ secrets.KAGI_SESSION_PASS }}
 
       - name: Update code documentation
         run: curl -fsSL https://proxy.golang.org/${{ steps.export_module_name.outputs.MODULE_NAME }}/@v/${{ github.ref_name }}.info
