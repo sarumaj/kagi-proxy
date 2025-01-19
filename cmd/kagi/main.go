@@ -12,10 +12,11 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
-	"github.com/sarumaj/kagi/pkg/api"
-	"github.com/sarumaj/kagi/pkg/common"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/sarumaj/kagi/pkg/api"
+	"github.com/sarumaj/kagi/pkg/common"
 )
 
 var (
@@ -28,6 +29,7 @@ var (
 	sessionSecret = flag.String("session-secret", common.Getenv[string]("KAGI_SESSION_SECRET", "test"), "test")
 	sessionUser   = flag.String("session-user", common.Getenv[string]("KAGI_SESSION_USER", "user"), "user")
 	sessionPass   = flag.String("session-pass", common.Getenv[string]("KAGI_SESSION_PASS", "pass"), "pass")
+	proxyHost     = flag.String("proxy-host", common.Getenv[string]("KAGI_PROXY_HOST", "kagi.com"), "kagi.com")
 )
 
 func main() {
@@ -55,11 +57,12 @@ func main() {
 		// Create a new cookie store.
 		store := cookie.NewStore([]byte(*sessionSecret))
 		store.Options(sessions.Options{
+			Domain:   *proxyHost, // Required to support wildcard subdomains
 			Path:     "/",
 			MaxAge:   3600 * 24, // 1 day
 			Secure:   true,
 			HttpOnly: true,
-			SameSite: http.SameSiteStrictMode,
+			SameSite: http.SameSiteLaxMode,
 		})
 		e.Use(sessions.Sessions("proxy_session", store))
 
@@ -77,7 +80,7 @@ func main() {
 		}))
 
 		// Set the HTML templates.
-		e.SetHTMLTemplate(api.Templates())
+		e.SetHTMLTemplate(api.HTMLTemplates())
 
 		// Use the rate limiting middleware.
 		e.Use(api.Rate(*limitRPS, int(*limitBurst)))
@@ -100,8 +103,13 @@ func main() {
 	router.GET("/settings", api.HandleLogout())
 
 	// Add a proxy route.
-	router.NoRoute(api.BasicAuth([]string{"/favicon.ico"}), api.ProxyPass(*sessionToken))
+	router.NoRoute(api.BasicAuth([]string{"/favicon.ico"}), api.ProxyPass(map[string]string{
+		*proxyHost:                "kagi.com",
+		"translate." + *proxyHost: "translate.kagi.com",
+		"assets." + *proxyHost:    "assets.kagi.com",
+	}, *sessionToken))
 
+	// Start the server.
 	if err := router.Run(fmt.Sprintf(":%d", *port)); err != nil {
 		common.Logger.Fatal("Unexpected server error", zap.Error(err))
 	}

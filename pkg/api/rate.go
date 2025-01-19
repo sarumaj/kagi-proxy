@@ -4,9 +4,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sarumaj/kagi/pkg/common"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
+
+	"github.com/sarumaj/kagi/pkg/common"
 )
 
 // Rate is a middleware that limits the request rate.

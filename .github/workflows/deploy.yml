@@ -77,6 +77,7 @@ jobs:
           HD_KAGI_SESSION_SECRET: ${{ secrets.KAGI_SESSION_SECRET }}
           HD_KAGI_SESSION_USER: ${{ secrets.KAGI_SESSION_USER }}
           HD_KAGI_SESSION_PASS: ${{ secrets.KAGI_SESSION_PASS }}
+          HD_PROXY_HOST: ${{ secrets.KAGI_PROXY_HOST }}
 
       - name: Update code documentation
         run: curl -fsSL https://proxy.golang.org/${{ steps.export_module_name.outputs.MODULE_NAME }}/@v/${{ github.ref_name }}.info
