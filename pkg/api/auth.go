@@ -57,6 +57,7 @@ func CSRF(secret string) gin.HandlerFunc {
 // HandleLogin is a handler that authenticates the user.
 func HandleLogin(username, password string) gin.HandlerFunc {
 	loginLimiter := rate.NewLimiter(rate.Every(5*time.Second), 3) // 3 attempts every 5 seconds
+
 	return func(ctx *gin.Context) {
 		session := sessions.Default(ctx)
 		if !loginLimiter.Allow() {
@@ -66,11 +67,11 @@ func HandleLogin(username, password string) gin.HandlerFunc {
 			return
 		}
 
-		username := ctx.PostForm("username")
-		password := ctx.PostForm("password")
+		submittedUsername := ctx.PostForm("username")
+		submittedPassword := ctx.PostForm("password")
 
-		validUsername := subtle.ConstantTimeCompare([]byte(username), []byte(username)) == 1
-		validPassword := subtle.ConstantTimeCompare([]byte(password), []byte(password)) == 1
+		validUsername := subtle.ConstantTimeCompare([]byte(submittedUsername), []byte(username)) == 1
+		validPassword := subtle.ConstantTimeCompare([]byte(submittedPassword), []byte(password)) == 1
 
 		if validUsername && validPassword {
 			session.Set("user", username)

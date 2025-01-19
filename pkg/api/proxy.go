@@ -60,10 +60,10 @@ func ProxyPass(sessionToken string) gin.HandlerFunc {
 		common.Logger.Debug("Session token added to request", zap.String("sessionToken", sessionToken), zap.Reflect("cookies", req.Cookies()))
 	}
 
-	return func(ctx *gin.Context) {
-		(&httputil.ReverseProxy{
-			Transport: transport,
-			Director:  director,
-		}).ServeHTTP(ctx.Writer, ctx.Request)
+	proxy := &httputil.ReverseProxy{
+		Transport: transport,
+		Director:  director,
 	}
+
+	return func(ctx *gin.Context) { proxy.ServeHTTP(ctx.Writer, ctx.Request) }
 }
