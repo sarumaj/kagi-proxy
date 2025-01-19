@@ -25,8 +25,7 @@ func BasicAuth(exceptPaths []string) gin.HandlerFunc {
 		}
 
 		session := sessions.Default(ctx)
-		user := session.Get("user")
-		if user == nil {
+		if user := session.Get("user"); user == nil {
 			session.Set("redirect_url", ctx.Request.URL.String())
 			_ = session.Save()
 
@@ -63,6 +62,7 @@ func HandleLogin(username, password string) gin.HandlerFunc {
 		if !loginLimiter.Allow() {
 			session.AddFlash("Too many login attempts. Please try again later.")
 			_ = session.Save()
+
 			ctx.Redirect(http.StatusFound, RedirectLoginURL)
 			return
 		}
@@ -74,7 +74,7 @@ func HandleLogin(username, password string) gin.HandlerFunc {
 		validPassword := subtle.ConstantTimeCompare([]byte(submittedPassword), []byte(password)) == 1
 
 		if validUsername && validPassword {
-			session.Set("user", username)
+			session.Set("user", submittedUsername)
 			_ = session.Save()
 
 			redirectURL := session.Get("redirect_url")
@@ -118,6 +118,7 @@ func ShowLogin() gin.HandlerFunc {
 		token := csrf.GetToken(ctx)
 
 		ctx.HTML(http.StatusOK, "login.html", gin.H{
+			"action":     RedirectLoginURL,
 			"flash":      flash,
 			"csrf_token": token,
 		})

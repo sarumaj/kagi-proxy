@@ -87,6 +87,7 @@ func main() {
 	router.Match([]string{http.MethodHead, http.MethodGet}, "/health", func(ctx *gin.Context) { ctx.Status(http.StatusOK) })
 
 	// Add a redirect login route.
+	api.RedirectLoginURL = "/signin"
 	if login := router.Group(api.RedirectLoginURL, api.CSRF(*sessionSecret)); true {
 		login.GET("/", api.ShowLogin())
 		login.POST("/", api.HandleLogin(*sessionUser, *sessionPass))

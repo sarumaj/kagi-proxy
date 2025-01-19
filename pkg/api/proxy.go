@@ -34,10 +34,10 @@ func ProxyPass(sessionToken string) gin.HandlerFunc {
 
 		common.Logger.Debug("Proxying request", zap.String("url", req.URL.String()))
 
-		sessionEstablished := req.URL.Query().Has("token")
+		sessionEstablished := len(req.URL.Query().Get("token")) > 0
 		if !sessionEstablished {
 			cookie, err := req.Cookie("kagi_session")
-			sessionEstablished = err == nil && cookie != nil && cookie.Value != "" && cookie.Expires.After(time.Now())
+			sessionEstablished = err == nil && cookie != nil && len(cookie.Value) > 0 && cookie.Expires.After(time.Now())
 		}
 
 		common.Logger.Debug("Session established", zap.Bool("sessionEstablished", sessionEstablished))
