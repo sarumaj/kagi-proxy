@@ -1,6 +1,6 @@
 # kagi
 
-Redirect service for kagi.com.
+Redirect service for [kagi.com](https://kagi.com).
 
 I wrote a simple proxy service to share access to my kagi.com subscription with a limited number of people.
 
