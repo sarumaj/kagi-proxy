@@ -1,0 +1,310 @@
+/* login.css */
+/* Variables */
+:root {
+  --background-color: #ffffff;
+  --error-color: #dc3545;
+  --input-background: #f8f9fa;
+  --primary-color: #1a73e8;
+  --text-color: #333333;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-color: #1a1a1a;
+    --error-color: #ff6b6b;
+    --input-background: #2d2d2d;
+    --primary-color: #60a5fa;
+    --text-color: #e0e0e0;
+  }
+}
+
+/* Element Selectors */
+body {
+  align-items: center;
+  background-color: var(--background-color);
+  color: var(--text-color);
+  display: flex;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  justify-content: center;
+  line-height: 1.6;
+  margin: 0;
+  min-height: 100vh;
+  padding: 0;
+}
+
+input:not(.otp-field) {
+  background-color: var(--input-background);
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+  color: var(--text-color);
+  padding: 0.75rem;
+  width: 100%;
+}
+
+input:not(.otp-field):focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+  outline: none;
+}
+
+label {
+  color: var(--text-color);
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+/* Class Selectors */
+.copy-button {
+  background: var(--primary-color);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.copy-button:hover {
+  background-color: #1557b0;
+}
+
+.eye-icon {
+  fill: var(--text-color);
+  opacity: 0.6;
+}
+
+.flash-message {
+  background-color: var(--error-color);
+  border-radius: 4px;
+  color: white;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  text-align: center;
+}
+
+.footer {
+  color: var(--text-color);
+  font-size: 0.8rem;
+  margin-top: 2rem;
+  opacity: 0.7;
+  text-align: center;
+}
+
+.footer a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.loading {
+  align-items: center;
+  color: var(--text-color);
+  display: flex;
+  justify-content: center;
+  min-height: 164px;
+  opacity: 0.7;
+}
+
+.login-container {
+  background-color: var(--background-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin: 1rem;
+  max-width: 400px;
+  padding: 2rem;
+  width: 100%;
+}
+
+.login-title {
+  color: var(--primary-color);
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.otp-field {
+  background-color: var(--input-background);
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  color: var(--text-color);
+  font-size: 1.25rem;
+  height: 2.5rem;
+  padding: 0;
+  text-align: center;
+  transition: all 0.2s;
+  width: 2.5rem;
+}
+
+.otp-field:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+  outline: none;
+}
+
+.otp-field::selection {
+  background-color: transparent;
+}
+
+.otp-field::-webkit-outer-spin-button,
+.otp-field::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.otp-field:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 30px var(--input-background) inset !important;
+  -webkit-text-fill-color: var(--text-color) !important;
+}
+
+.otp-field[type="number"] {
+  -moz-appearance: textfield;
+  -webkit-appearance: textfield;
+  appearance: textfield;
+}
+
+.otp-fields {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-top: 1rem;
+  position: relative;
+}
+
+.password-container {
+  align-items: center;
+  display: flex;
+  position: relative;
+}
+
+.password-container input {
+  padding-right: 40px;
+}
+
+.password-toggle {
+  align-items: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  padding: 4px;
+  position: absolute;
+  right: 8px;
+}
+
+.password-toggle:hover {
+  opacity: 0.8;
+}
+
+.password-toggle:hover .eye-icon {
+  opacity: 0.8;
+}
+
+.qr-code {
+  background: white;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.qr-container {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  margin: 2rem 0;
+  width: 100%;
+}
+
+.secret-key {
+  background: var(--input-background);
+  border-radius: 4px;
+  font-family: monospace;
+  margin: 1rem 0;
+  padding: 0.5rem;
+  text-align: center;
+  white-space: nowrap;
+  word-break: normal;
+  overflow-x: auto;
+  max-width: 100%;
+  width: 100%;
+
+  &::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: var(--background-color);
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+  }
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary-color) var(--background-color);
+}
+
+.submit-button {
+  background-color: var(--primary-color);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0.75rem;
+  transition: background-color 0.2s;
+  width: 100%;
+}
+
+.submit-button:hover {
+  background-color: #1557b0;
+}
+
+.tab {
+  background: none;
+  border: none;
+  color: var(--text-color);
+  cursor: pointer;
+  opacity: 0.7;
+  padding: 0.75rem 1.5rem;
+  transition: opacity 0.2s;
+}
+
+.tab.active {
+  border-bottom: 2px solid var(--primary-color);
+  opacity: 1;
+}
+
+.tabs {
+  border-bottom: 1px solid var(--text-color);
+  display: flex;
+  margin-bottom: 2rem;
+}
+
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+/* Media Queries */
+@media (max-width: 480px) {
+  .login-container {
+    margin: 1rem;
+    padding: 1rem;
+  }
+}

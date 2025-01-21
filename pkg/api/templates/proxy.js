@@ -1,13 +1,24 @@
+// proxy.js
 (function () {
-  const originalMap = JSON.parse(`{{ json .host_map}}`);
+  const originalHostMap = JSON.parse(`{{ json .host_map }}`);
   const hostMap = Object.fromEntries(
-    Object.entries(originalMap).map(([proxy, target]) => [target, proxy])
+    Object.entries(originalHostMap).map(([proxy, target]) => [target, proxy])
   );
+
+  window.logEvent =
+    window.logEvent ||
+    function () {
+      console.debug("Logging disabled in proxy mode");
+    };
 
   function replaceHost(url) {
     if (!url) return url;
     try {
       const urlObj = new URL(url, window.location.href);
+      const tokenValue = urlObj.searchParams.get("token");
+      if (tokenValue && tokenValue.length > 0) {
+        urlObj.searchParams.delete("token");
+      }
       for (const [targetHost, proxyDomain] of Object.entries(hostMap)) {
         if (
           urlObj.host === targetHost ||

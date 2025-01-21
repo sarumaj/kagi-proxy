@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
 
-	"github.com/sarumaj/kagi/pkg/common"
+	"github.com/sarumaj/kagi-proxy/pkg/common"
 )
 
 // Rate is a middleware that limits the request rate.
@@ -16,7 +16,7 @@ func Rate(rps float64, burst int) gin.HandlerFunc {
 
 	return func(ctx *gin.Context) {
 		if err := limiter.WaitN(ctx, 1); err != nil {
-			common.Logger.Warn("Rate limit exceeded", zap.Error(err))
+			common.Logger().Warn("Rate limit exceeded", zap.Error(err))
 			ctx.AbortWithStatus(http.StatusTooManyRequests)
 			return
 		}

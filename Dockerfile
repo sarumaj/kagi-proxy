@@ -14,7 +14,7 @@ RUN go generate ./... && \
     -ldflags="-s -w -extldflags=-static" \
     -tags="osusergo netgo static_build" \
     -o /server \
-    cmd/kagi/*.go && \
+    cmd/kagi-proxy/*.go && \
     rm -rf /usr/src/app
 
 FROM alpine:latest AS certs

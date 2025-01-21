@@ -74,10 +74,11 @@ jobs:
           delay: 5
         env:
           HD_KAGI_SESSION_TOKEN: ${{ secrets.KAGI_SESSION_TOKEN }}
-          HD_KAGI_SESSION_SECRET: ${{ secrets.KAGI_SESSION_SECRET }}
-          HD_KAGI_SESSION_USER: ${{ secrets.KAGI_SESSION_USER }}
-          HD_KAGI_SESSION_PASS: ${{ secrets.KAGI_SESSION_PASS }}
-          HD_PROXY_HOST: ${{ secrets.KAGI_PROXY_HOST }}
+          HD_PROXY_SESSION_SECRET: ${{ secrets.PROXY_SESSION_SECRET }}
+          HD_PROXY_OTP_SECRET: ${{ secrets.PROXY_OTP_SECRET }}
+          HD_PROXY_USER: ${{ secrets.PROXY_USER }}
+          HD_PROXY_PASS: ${{ secrets.PROXY_PASS }}
+          HD_PROXY_HOST: ${{ secrets.PROXY_HOST }}
 
       - name: Update code documentation
         run: curl -fsSL https://proxy.golang.org/${{ steps.export_module_name.outputs.MODULE_NAME }}/@v/${{ github.ref_name }}.info

@@ -7,14 +7,24 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var Logger *zap.Logger
+var logger *zap.Logger
 
 func init() {
+	logger = Logger()
+}
+
+func Logger() *zap.Logger {
+	if logger != nil {
+		return logger
+	}
+
 	cfg := zap.NewDevelopmentEncoderConfig()
 	cfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	enc := zapcore.NewConsoleEncoder(cfg)
-	Logger = zap.New(zapcore.NewTee(
+	logger = zap.New(zapcore.NewTee(
 		zapcore.NewCore(enc, zapcore.Lock(os.Stdout), zap.LevelEnablerFunc(func(lvl zapcore.Level) bool { return lvl < zapcore.ErrorLevel })),
 		zapcore.NewCore(enc, zapcore.Lock(os.Stderr), zap.LevelEnablerFunc(func(lvl zapcore.Level) bool { return lvl >= zapcore.ErrorLevel })),
 	))
+
+	return logger
 }

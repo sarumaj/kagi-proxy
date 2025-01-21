@@ -2,6 +2,7 @@
   "cSpell.words": [
     "akhileshns",
     "andybalholm",
+    "autocompleteerror",
     "buildvcs",
     "bytedance",
     "CCPA",
@@ -10,6 +11,7 @@
     "Consolas",
     "cpuid",
     "Dawid",
+    "eqfield",
     "extldflags",
     "ginzap",
     "Ginzap",
@@ -34,17 +36,22 @@
     "Menlo",
     "MIMEHTML",
     "multierr",
+    "multitemplate",
     "netgo",
+    "nosniff",
     "NXDOMAIN",
     "osusergo",
+    "pquerna",
     "Roboto",
     "rollbackonhealthcheckfailed",
     "rtrimstr",
     "sarumaj",
     "SCHEMATOGO",
     "Segoe",
+    "signup",
     "sslmode",
     "Stringp",
+    "totp",
     "trimpath",
     "twitchyliquid",
     "ugorji",
@@ -53,5 +60,5 @@
     "utrack",
     "vasile"
   ],
-  "cSpell.ignorePaths": ["go.sum"]
+  "cSpell.ignorePaths": ["go.sum", "go.mod"]
 }
