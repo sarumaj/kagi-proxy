@@ -7,7 +7,7 @@ Proxy service for [kagi.com](https://kagi.com). [kagi.com](https://kagi.com) off
 - Google: _Gemini Pro_
 - Meta: _Llama 3_
 
-The subscription is around 25$ for both the unlimited search engine and AI assistant services. Family plan is provided as well, whereas the fee rounds up to 20$ base rate + 15$ for each member. I wrote a simple proxy service to make my personal [kagi.com](https://kagi.com) subscription shareable with a limited number of people. I provide a reversed proxy behind TLS, basic authentication scheme, CSRF and DDoS protection by employing request throttling. I interfere with the kagi.com interface via DOM content mutation observation and JS injection to provide a seamless user experience.
+The subscription is around 25$ each month for both the unlimited search engine and AI assistant services. Family plan is provided as well, whereas the fee rounds up to 20$ base rate + 15$ for each member per month. I wrote a simple proxy service to make my personal [kagi.com](https://kagi.com) subscription shareable with a limited number of people. I provide a reversed proxy behind TLS, basic authentication scheme, CSRF and DDoS protection by employing request throttling. I interfere with the kagi.com interface via DOM content mutation observation and JS injection to provide a seamless user experience.
 
 Proxy is exposed behind [kagi.sarumaj.com](https://kagi.sarumaj.com):
 
