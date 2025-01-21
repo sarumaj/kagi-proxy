@@ -33,6 +33,11 @@ body {
   padding: 0;
 }
 
+input,
+button {
+  touch-action: manipulation;
+}
+
 input:not(.otp-field) {
   background-color: var(--input-background);
   border: 1px solid #ddd;
@@ -175,9 +180,11 @@ label {
 .otp-fields {
   display: flex;
   gap: 0.5rem;
-  justify-content: center;
+  flex-wrap: nowrap;
+  justify-content: space-between;
   margin-top: 1rem;
   position: relative;
+  width: 100%;
 }
 
 .password-container {
@@ -225,6 +232,10 @@ label {
   width: 100%;
 }
 
+.qr-container[data-hidden="true"] {
+  display: none !important;
+}
+
 .secret-key {
   background: var(--input-background);
   border-radius: 4px;
@@ -233,10 +244,13 @@ label {
   padding: 0.5rem;
   text-align: center;
   white-space: nowrap;
-  word-break: normal;
+  word-break: break-all;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
   overflow-x: auto;
   max-width: 100%;
   width: 100%;
+  -webkit-overflow-scrolling: touch;
 
   &::-webkit-scrollbar {
     height: 8px;
@@ -266,6 +280,7 @@ label {
   padding: 0.75rem;
   transition: background-color 0.2s;
   width: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .submit-button:hover {
@@ -273,6 +288,7 @@ label {
 }
 
 .tab {
+  flex: 1;
   background: none;
   border: none;
   color: var(--text-color);
@@ -291,6 +307,11 @@ label {
   border-bottom: 1px solid var(--text-color);
   display: flex;
   margin-bottom: 2rem;
+  width: 100%;
+  z-index: 1;
+  padding: 0;
+  top: 0;
+  position: sticky;
 }
 
 .tab-content {
@@ -302,9 +323,39 @@ label {
 }
 
 /* Media Queries */
+@media (hover: none) {
+  .submit-button:active,
+  .copy-button:active,
+  .tab:active {
+    opacity: 0.7;
+    transition: opacity 0.1s;
+  }
+}
+
 @media (max-width: 480px) {
   .login-container {
     margin: 1rem;
     padding: 1rem;
+    min-height: 100vh;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .qr-code {
+    background: #333;
+  }
+
+  input:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 30px var(--input-background) inset !important;
+    -webkit-text-fill-color: var(--text-color) !important;
+  }
+}
+
+/* Prevent zoom on focus for iOS */
+@supports (-webkit-touch-callout: none) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
   }
 }

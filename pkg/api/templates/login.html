@@ -2,7 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#1a73e8" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta http-equiv="Content-Security-Policy" content="{{ .csp }}" />
     <title>Login - Kagi Proxy</title>
     <style nonce="{{ .nonce }}">
       /* {{ template "login.css" . }} */
@@ -12,182 +16,211 @@
     <div class="login-container">
       <h1 class="login-title">Kagi Proxy</h1>
 
-      <div class="tabs">
-        <button class="tab active" data-tab="login">Login</button>
-        <button class="tab" data-tab="setup">OTP Setup</button>
-      </div>
-
-      {{ if .flash }} {{ range .flash }}
+      <!--{{ if .flash }} {{ range .flash }}-->
       <div class="flash-message">{{ . }}</div>
-      {{ end }} {{ end }}
+      <!--{{ end }} {{ end }}-->
 
-      <div id="login-tab" class="tab-content active">
+      <div class="tabs">
+        <button
+          class="tab{{ if not .setup_active }} active{{end}}"
+          data-tab="login"
+        >
+          Login
+        </button>
+        <button
+          class="tab{{ if .setup_active }} active{{end}}"
+          data-tab="setup"
+        >
+          OTP Setup
+        </button>
+      </div>
+
+      <div
+        id="login-tab"
+        class="tab-content{{ if not .setup_active }} active{{end}}"
+      >
         <form id="login-form" method="POST" action="{{ .login_action }}">
-          <input type="hidden" name="_csrf" value="{{ .csrf_token }}" />
+          <section autocomplete="current">
+            <input type="hidden" name="_csrf" value="{{ .csrf_token }}" />
 
-          <div class="form-group">
-            <label for="username">Username</label>
-            <input
-              type="text"
-              id="username"
-              name="username"
-              required
-              autocomplete="username"
-              data-autocomplete="username"
-              data-form-type="other"
-              enterkeyhint="done"
-            />
-          </div>
-
-          <div class="form-group">
-            <label for="password">Password</label>
-            <div class="password-container">
+            <div class="form-group">
+              <label for="username-login">Username</label>
               <input
-                type="password"
-                id="password"
-                name="password"
+                type="text"
+                id="username-login"
+                name="username"
                 required
-                autocomplete="current-password"
-                data-autocomplete="current-password"
-                data-form-type="other"
-                enterkeyhint="done"
+                autocomplete="username"
+                data-autocomplete="username"
+                data-form-type="login"
+                enterkeyhint="next"
               />
-              <button
-                type="button"
-                class="password-toggle"
-                aria-label="Toggle password visibility"
-              >
-                <svg
-                  class="eye-icon"
-                  viewBox="0 0 24 24"
-                  width="24"
-                  height="24"
+            </div>
+
+            <div class="form-group">
+              <label for="password">Password</label>
+              <div class="password-container">
+                <input
+                  type="password"
+                  id="password"
+                  name="password"
+                  required
+                  autocomplete="current-password"
+                  data-autocomplete="current-password"
+                  data-form-type="login"
+                  enterkeyhint="next"
+                />
+                <button
+                  type="button"
+                  class="password-toggle"
+                  aria-label="Toggle password visibility"
                 >
-                  <path
-                    d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
-                  />
-                </svg>
-              </button>
+                  <svg
+                    class="eye-icon"
+                    viewBox="0 0 24 24"
+                    width="24"
+                    height="24"
+                  >
+                    <path
+                      d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div class="form-group">
-            <label for="otp">One-Time Password</label>
-            <div class="otp-fields">
-              <input
-                type="text"
-                class="otp-field"
-                maxlength="1"
-                pattern="[0-9]"
-                inputmode="numeric"
-                aria-label="OTP digit 1"
-                autocomplete="off"
-              />
-              <input
-                type="text"
-                class="otp-field"
-                maxlength="1"
-                pattern="[0-9]"
-                inputmode="numeric"
-                aria-label="OTP digit 2"
-                autocomplete="off"
-              />
-              <input
-                type="text"
-                class="otp-field"
-                maxlength="1"
-                pattern="[0-9]"
-                inputmode="numeric"
-                aria-label="OTP digit 3"
-                autocomplete="off"
-              />
-              <input
-                type="text"
-                class="otp-field"
-                maxlength="1"
-                pattern="[0-9]"
-                inputmode="numeric"
-                aria-label="OTP digit 4"
-                autocomplete="off"
-              />
-              <input
-                type="text"
-                class="otp-field"
-                maxlength="1"
-                pattern="[0-9]"
-                inputmode="numeric"
-                aria-label="OTP digit 5"
-                autocomplete="off"
-              />
-              <input
-                type="text"
-                class="otp-field"
-                maxlength="1"
-                pattern="[0-9]"
-                inputmode="numeric"
-                aria-label="OTP digit 6"
-                autocomplete="off"
-              />
-              <input
-                type="text"
-                class="otp-field"
-                maxlength="1"
-                pattern="[0-9]"
-                inputmode="numeric"
-                aria-label="OTP digit 7"
-                autocomplete="off"
-              />
-              <input
-                type="text"
-                class="otp-field"
-                maxlength="1"
-                pattern="[0-9]"
-                inputmode="numeric"
-                aria-label="OTP digit 8"
-                autocomplete="one-time-code"
-                data-autocomplete="one-time-code"
-                data-form-type="other"
-                enterkeyhint="done"
-              />
+            <div class="form-group">
+              <label for="otp">One-Time Password</label>
+              <div class="otp-fields">
+                <input
+                  type="text"
+                  class="otp-field"
+                  maxlength="1"
+                  pattern="[0-9]"
+                  inputmode="numeric"
+                  aria-label="OTP digit 1"
+                  autocomplete="off"
+                />
+                <input
+                  type="text"
+                  class="otp-field"
+                  maxlength="1"
+                  pattern="[0-9]"
+                  inputmode="numeric"
+                  aria-label="OTP digit 2"
+                  autocomplete="off"
+                />
+                <input
+                  type="text"
+                  class="otp-field"
+                  maxlength="1"
+                  pattern="[0-9]"
+                  inputmode="numeric"
+                  aria-label="OTP digit 3"
+                  autocomplete="off"
+                />
+                <input
+                  type="text"
+                  class="otp-field"
+                  maxlength="1"
+                  pattern="[0-9]"
+                  inputmode="numeric"
+                  aria-label="OTP digit 4"
+                  autocomplete="off"
+                />
+                <input
+                  type="text"
+                  class="otp-field"
+                  maxlength="1"
+                  pattern="[0-9]"
+                  inputmode="numeric"
+                  aria-label="OTP digit 5"
+                  autocomplete="off"
+                />
+                <input
+                  type="text"
+                  class="otp-field"
+                  maxlength="1"
+                  pattern="[0-9]"
+                  inputmode="numeric"
+                  aria-label="OTP digit 6"
+                  autocomplete="off"
+                />
+                <input
+                  type="text"
+                  class="otp-field"
+                  maxlength="1"
+                  pattern="[0-9]"
+                  inputmode="numeric"
+                  aria-label="OTP digit 7"
+                  autocomplete="off"
+                />
+                <input
+                  type="text"
+                  class="otp-field"
+                  maxlength="1"
+                  pattern="[0-9]"
+                  inputmode="numeric"
+                  aria-label="OTP digit 8"
+                  autocomplete="one-time-code"
+                  data-autocomplete="one-time-code"
+                  data-form-type="login"
+                  enterkeyhint="done"
+                />
+              </div>
+
+              <input type="hidden" id="otp" name="otp" required />
             </div>
-            <input type="hidden" id="otp" name="otp" required />
-          </div>
 
-          <button type="submit" class="submit-button">Log In</button>
+            <button type="submit" class="submit-button">Log In</button>
+          </section>
         </form>
       </div>
 
-      <div id="setup-tab" class="tab-content">
+      <div
+        id="setup-tab"
+        class="tab-content{{ if .setup_active }} active{{end}}"
+      >
         <form id="setup-form" method="POST" action="{{ .setup_action }}">
-          <input type="hidden" name="_csrf" value="{{ .csrf_token }}" />
-          <input type="hidden" name="width" value="200" />
-          <input type="hidden" name="height" value="200" />
-          <div class="form-group">
-            <label for="username">Username</label>
-            <input
-              type="text"
-              id="username-otp"
-              name="username"
-              required
-              autocomplete="username"
-              data-autocomplete="username"
-              data-form-type="other"
-              enterkeyhint="done"
-            />
-          </div>
+          <section autocomplete="new">
+            <input type="hidden" name="_csrf" value="{{ .csrf_token }}" />
+            <input type="hidden" name="width" value="200" />
+            <input type="hidden" name="height" value="200" />
 
-          <button type="submit" class="submit-button">Generate QR Code</button>
+            <div class="form-group">
+              <label for="username-setup">Username</label>
+              <input
+                type="text"
+                id="username-setup"
+                name="username"
+                required
+                autocomplete="username"
+                data-autocomplete="username"
+                data-form-type="setup"
+                enterkeyhint="done"
+              />
+            </div>
+
+            <button type="submit" class="submit-button">Generate QR Code</button>
+          </section>
         </form>
 
-        <div class="qr-container" id="qr-container">
+        <div class="qr-container" id="qr-container" data-hidden="{{ printf "%t" (not (or .qr_code .secret_key)) }}">
           <div class="qr-code" id="qr-code">
-            <!-- QR code will be inserted here -->
+            <!--{{ if .qr_code }}-->
+            {{ .qr_code }}
+            <!--{{ else }}-->
+            <div class="loading">Generating...</div>
+            <!--{{ end }}-->
           </div>
+
           <div class="secret-key" id="secret-key">
-            <!-- Secret key will be displayed here -->
+            <!--{{ if .secret_key }}-->{{ .secret_key }}<!--{{ end }}-->
           </div>
+
           <button class="copy-button" id="copy-secret">Copy Secret URL</button>
         </div>
+        
       </div>
 
       <div class="footer">

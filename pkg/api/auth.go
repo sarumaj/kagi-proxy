@@ -2,10 +2,10 @@ package api
 
 import (
 	"bytes"
-	"crypto/rand"
 	"crypto/subtle"
-	"encoding/base32"
 	"encoding/base64"
+	"html"
+	"html/template"
 	"image/png"
 	"net/http"
 	"strings"
@@ -18,10 +18,14 @@ import (
 	"github.com/sarumaj/kagi-proxy/pkg/common"
 	csrf "github.com/utrack/gin-csrf"
 	"go.uber.org/zap"
-	"golang.org/x/net/html"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // BasicAuth is a middleware that checks if the user is authenticated.
+// It skips authentication for the paths in exceptPaths.
+// It seeks the proxy_token query parameter to authenticate the user.
+// Otherwise, it seeks the user session.
+// If the user is not authenticated, it redirects to the login page.
 func BasicAuth(exceptPaths []string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		for _, path := range exceptPaths {
@@ -32,13 +36,42 @@ func BasicAuth(exceptPaths []string) gin.HandlerFunc {
 			}
 		}
 
+		// Seek the proxy_token query parameter
 		session := sessions.Default(ctx)
+		if token := ctx.Query("proxy_token"); len(token) > 0 {
+			common.Logger().Debug("User provided token", zap.String("token", token))
+			if hash, err := common.B64URLNoPadding.DecodeString(token); err != nil {
+				common.Logger().Error("failed to decode token", zap.Error(err))
+			} else if err := bcrypt.CompareHashAndPassword(hash, []byte(common.ConfigProxyUser())); err != nil {
+				common.Logger().Error("hash mismatched", zap.Error(err))
+			} else {
+				common.Logger().Debug("User authenticated with token")
+
+				// Establish or overwrite the user session
+				session.Set("user", common.ConfigProxyUser())
+				if !sessionSave(session, ctx) {
+					return
+				}
+
+				// Dispose the proxy_token query parameter
+				q := ctx.Request.URL.Query()
+				q.Del("proxy_token")
+				ctx.Request.URL.RawQuery = q.Encode()
+
+				ctx.Next()
+				return
+			}
+		}
+
+		// Seek the user session
 		if user := session.Get("user"); user == nil {
 			common.Logger().Debug("User not authenticated")
 			session.Set("redirect_url", ctx.Request.URL.String())
-			_ = session.Save()
+			if !sessionSave(session, ctx) {
+				return
+			}
 
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
+			ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL())
 			ctx.Abort()
 			return
 		}
@@ -55,127 +88,144 @@ func CSRF() gin.HandlerFunc {
 		ErrorFunc: func(ctx *gin.Context) {
 			session := sessions.Default(ctx)
 			session.AddFlash("Invalid CSRF token")
-			_ = session.Save()
+			if !sessionSave(session, ctx) {
+				return
+			}
 
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
+			common.Logger().Debug("Invalid CSRF token")
+			ctx.Redirect(http.StatusSeeOther, ctx.Request.URL.Path)
 			ctx.Abort()
 		},
 	})
 }
 
 // CTEqual is a constant-time comparison function.
-func CTEqual(a, b string) bool {
+func CTEqual[S interface{ ~string | ~[]byte }](a, b S) bool {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
-// GetNonce generates a random nonce.
-func GetNonce() (string, error) {
-	nonce := make([]byte, 32)
-	_, err := rand.Read(nonce)
-	if err != nil {
-		return "", err
-	}
-
-	return base64.StdEncoding.EncodeToString(nonce), nil
-}
-
-// GenerateOTP is a handler that generates an OTP.
-func GenerateOTP() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		session := sessions.Default(ctx)
-		if len(common.ConfigProxyOTPSecret()) == 0 {
-			common.Logger().Error("OTP secret is not set")
-			session.AddFlash("Internal server error")
-			_ = session.Save()
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
-			return
-		}
-
-		var request struct {
-			Username string `json:"username" form:"username" binding:"required"`
-			Width    int    `json:"width" form:"width" binding:"required,min=100,max=250"`
-			Height   int    `json:"height" form:"height" binding:"required,eqfield=Width"`
-		}
-		if err := ctx.Bind(&request); err != nil {
-			common.Logger().Error("failed to bind JSON", zap.Error(err))
-			session.AddFlash("Invalid request")
-			_ = session.Save()
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
-			return
-		}
-
-		validUsername := CTEqual(request.Username, common.ConfigProxyUser())
-		if !validUsername {
-			common.Logger().Info("invalid username", zap.String("username", request.Username))
-			session.AddFlash("Invalid username")
-			_ = session.Save()
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
-			return
-		}
-
-		key, err := totp.Generate(totp.GenerateOpts{
-			Issuer:      "Kagi-Proxy",
-			AccountName: request.Username,
-			Period:      30, // 30 seconds
-			Digits:      otp.DigitsEight,
-			Algorithm:   otp.AlgorithmSHA1,
-			SecretSize:  uint(len(common.ConfigProxyOTPSecret())),
-			Rand:        bytes.NewReader([]byte(common.ConfigProxyOTPSecret())),
-		})
-		if err != nil {
-			common.Logger().Error("failed to generate OTP", zap.Error(err))
-			session.AddFlash("Internal server error")
-			_ = session.Save()
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
-			return
-		}
-
-		var response struct {
-			QRCode string `json:"qrCode"`
-			Secret string `json:"secret"`
-			URL    string `json:"url"`
-		}
-
-		img, err := key.Image(request.Width, request.Height)
-		if err != nil {
-			common.Logger().Error("failed to generate QR code", zap.Error(err))
-			session.AddFlash("Internal server error")
-			_ = session.Save()
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
-			return
-		}
-
-		var buf bytes.Buffer
-		if err := png.Encode(&buf, img); err != nil {
-			common.Logger().Error("failed to encode QR code", zap.Error(err))
-			session.AddFlash("Internal server error")
-			_ = session.Save()
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
-			return
-		}
-
-		response.QRCode = "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
-		response.Secret = key.Secret()
-		response.URL = key.URL()
-
-		ctx.JSON(http.StatusOK, response)
-	}
-}
-
 // HandleLogin is a handler that authenticates the user.
+// If the user is not authenticated, it redirects to the login page.
+// If the user is authenticated, it redirects to the root page or
+// the location he attempted to access before page.
+// It supports two actions: login and signup.
+// Login action authenticates the user with username, password, and OTP.
+// Signup action generates a QR code for the user to set up OTP.
 func HandleLogin() gin.HandlerFunc {
-	b32NoPadding := base32.StdEncoding.WithPadding(base32.NoPadding)
-
 	return func(ctx *gin.Context) {
 		session := sessions.Default(ctx)
+
+		// Check if the OTP secret is set
 		if len(common.ConfigProxyOTPSecret()) == 0 {
 			common.Logger().Error("OTP secret is not set")
 			session.AddFlash("Internal server error")
-			_ = session.Save()
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
+			if !sessionSave(session, ctx) {
+				return
+			}
+			ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL())
 			return
 		}
 
+		// Verify mode operation
+		var query struct {
+			SignUp bool `form:"signup"`
+		}
+		if err := ctx.ShouldBindQuery(&query); err != nil {
+			common.Logger().Error("failed to bind query", zap.Error(err))
+			session.AddFlash("Invalid request")
+			if !sessionSave(session, ctx) {
+				return
+			}
+			ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL())
+			return
+		}
+
+		// Handle login and signup actions
+		if query.SignUp { // Signup action
+			var request struct {
+				Username string `json:"username" form:"username" binding:"required"`
+				Width    int    `json:"width" form:"width" binding:"required,min=100,max=250"`
+				Height   int    `json:"height" form:"height" binding:"required,eqfield=Width"`
+			}
+			if err := ctx.Bind(&request); err != nil {
+				common.Logger().Error("failed to bind JSON", zap.Error(err))
+				session.AddFlash("Invalid request")
+				if !sessionSave(session, ctx) {
+					return
+				}
+				ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL()+"?signup=true")
+				return
+			}
+
+			validUsername := CTEqual(request.Username, common.ConfigProxyUser())
+			if !validUsername {
+				common.Logger().Info("invalid username", zap.String("username", request.Username))
+				session.AddFlash("Invalid username")
+				if !sessionSave(session, ctx) {
+					return
+				}
+				ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL()+"?signup=true")
+				return
+			}
+
+			// Generate a QR code for the user to set up OTP
+			key, err := totp.Generate(totp.GenerateOpts{
+				Issuer:      "Kagi-Proxy",
+				AccountName: request.Username,
+				Period:      30, // 30 seconds
+				Digits:      otp.DigitsEight,
+				Algorithm:   otp.AlgorithmSHA1,
+				// Overwrite the attributes below to ensure deterministic behavior
+				SecretSize: uint(len(common.ConfigProxyOTPSecret())),
+				Rand:       bytes.NewReader([]byte(common.ConfigProxyOTPSecret())),
+			})
+			if err != nil {
+				common.Logger().Error("failed to generate OTP", zap.Error(err))
+				session.AddFlash("Internal server error")
+				if !sessionSave(session, ctx) {
+					return
+				}
+				ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL()+"?signup=true")
+				return
+			}
+
+			// Generate a QR code
+			img, err := key.Image(request.Width, request.Height)
+			if err != nil {
+				common.Logger().Error("failed to generate QR code", zap.Error(err))
+				session.AddFlash("Internal server error")
+				if !sessionSave(session, ctx) {
+					return
+				}
+				ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL()+"?signup=true")
+				return
+			}
+
+			var buf bytes.Buffer
+			if err := png.Encode(&buf, img); err != nil {
+				common.Logger().Error("failed to encode QR code", zap.Error(err))
+				session.AddFlash("Internal server error")
+				if !sessionSave(session, ctx) {
+					return
+				}
+				ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL()+"?signup=true")
+				return
+			}
+
+			// Distribute the QR code and the OTP setup URL
+			common.ConfigureProxy(
+				common.WithProxyOtpSetupQrCode(template.HTML(`<img src="data:image/png;base64,`+
+					base64.StdEncoding.EncodeToString(buf.Bytes())+
+					`" alt="QR code" />`)),
+				common.WithProxyOtpSetupURL(key.URL()),
+			)
+
+			// Redirect to force reloading the page
+			ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL()+"?signup=true")
+			return
+		}
+
+		// Handle login action
 		var request struct {
 			Username string `json:"username" form:"username" binding:"required"`
 			Password string `json:"password" form:"password" binding:"required"`
@@ -184,16 +234,20 @@ func HandleLogin() gin.HandlerFunc {
 		if err := ctx.ShouldBind(&request); err != nil {
 			common.Logger().Error("failed to bind JSON", zap.Error(err))
 			session.AddFlash("Invalid request")
-			_ = session.Save()
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
+			if !sessionSave(session, ctx) {
+				return
+			}
+
+			ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL())
 			return
 		}
 
+		// Validate the user credentials
 		validUsername := CTEqual(request.Username, common.ConfigProxyUser())
 		validPassword := CTEqual(request.Password, common.ConfigProxyPass())
 		validOTP, err := totp.ValidateCustom(
 			request.OTP,
-			b32NoPadding.EncodeToString([]byte(common.ConfigProxyOTPSecret())),
+			common.B32StdNoPadding.EncodeToString([]byte(common.ConfigProxyOTPSecret())),
 			time.Now(),
 			totp.ValidateOpts{
 				Period:    30,                // 30 seconds
@@ -205,25 +259,28 @@ func HandleLogin() gin.HandlerFunc {
 		if err != nil {
 			common.Logger().Error("failed to validate OTP", zap.Error(err))
 			session.AddFlash("Internal server error")
-			_ = session.Save()
-			ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
+			if !sessionSave(session, ctx) {
+				return
+			}
+			ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL())
 			return
 		}
 
+		// Success: Redirect the user to the root page or the location he attempted to access before page
 		if validUsername && validPassword && validOTP {
 			session.Set("user", request.Username)
-			_ = session.Save()
-
 			redirectURL := session.Get("redirect_url")
 			session.Delete("redirect_url")
-			_ = session.Save()
-
-			if redirectURL != nil {
-				ctx.Redirect(http.StatusFound, redirectURL.(string))
+			if !sessionSave(session, ctx) {
 				return
 			}
 
-			ctx.Redirect(http.StatusFound, "/")
+			if redirectURL != nil {
+				ctx.Redirect(http.StatusSeeOther, redirectURL.(string))
+				return
+			}
+
+			ctx.Redirect(http.StatusSeeOther, "/")
 			return
 
 		}
@@ -232,9 +289,13 @@ func HandleLogin() gin.HandlerFunc {
 			zap.Bool("valid_username", validUsername),
 			zap.Bool("valid_password", validPassword),
 			zap.Bool("valid_otp", validOTP))
+
+		// Failure: Redirect the user to the login page
 		session.AddFlash("Invalid credentials")
-		_ = session.Save()
-		ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
+		if !sessionSave(session, ctx) {
+			return
+		}
+		ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL())
 	}
 }
 
@@ -243,13 +304,50 @@ func HandleLogout() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		session := sessions.Default(ctx)
 		session.Clear()
-		_ = session.Save()
+		if !sessionSave(session, ctx) {
+			return
+		}
 
 		ctx.Redirect(http.StatusFound, common.ConfigProxyRedirectLoginURL())
 	}
 }
 
+// HandleUnauthorized is a handler that displays an unauthorized page.
+func HandleUnauthorized() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		nonce, _ := common.GetNonce()
+		SetContentSecurityHeaders(ctx.Writer, nonce)
+		ctx.HTML(http.StatusForbidden, "error.html", gin.H{
+			"code":  http.StatusForbidden,
+			"csp":   ctx.Writer.Header().Get("Content-Security-Policy"),
+			"error": nil,
+			"nonce": nonce,
+		})
+	}
+}
+
+// sessionSave saves the session and handles any errors that occur.
+// If an error occurs, it displays an error page and aborts the request.
+// It returns true if the session is saved successfully.
+func sessionSave(session sessions.Session, ctx *gin.Context) (success bool) {
+	if err := session.Save(); err != nil {
+		common.Logger().Error("failed to save session", zap.Error(err))
+		nonce, _ := common.GetNonce()
+		SetContentSecurityHeaders(ctx.Writer, nonce)
+		ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{
+			"code":  http.StatusInternalServerError,
+			"csp":   ctx.Writer.Header().Get("Content-Security-Policy"),
+			"error": html.EscapeString(err.Error()),
+			"nonce": nonce,
+		})
+		ctx.Abort()
+	}
+
+	return !ctx.IsAborted()
+}
+
 // SetContentSecurityHeaders sets the Content-Security-Policy, X-Frame-Options, and X-Content-Type-Options headers.
+// It uses the nonce to set the script-src and style-src directives.
 func SetContentSecurityHeaders(w http.ResponseWriter, nonce string) {
 	w.Header().Set("Content-Security-Policy", strings.Join([]string{
 		"default-src 'none'",
@@ -258,7 +356,6 @@ func SetContentSecurityHeaders(w http.ResponseWriter, nonce string) {
 		"img-src 'self' data:",
 		"connect-src 'self'",
 		"form-action 'self'",
-		"frame-ancestors 'none'",
 		"base-uri 'none'",
 		"font-src 'self'",
 		"manifest-src 'self'",
@@ -272,30 +369,50 @@ func SetContentSecurityHeaders(w http.ResponseWriter, nonce string) {
 }
 
 // ShowLogin is a handler that displays the login page.
+// It displays the login page with renders the flash messages originating from the session.
 func ShowLogin() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		session := sessions.Default(ctx)
 		flash := session.Flashes()
-		_ = session.Save()
-
-		token := csrf.GetToken(ctx)
-		nonce, err := GetNonce()
-		if err != nil {
-			ctx.HTML(http.StatusInternalServerError, "error.html", gin.H{
-				"error": html.EscapeString(err.Error()),
-				"code":  http.StatusInternalServerError,
-				"nonce": nonce,
-			})
+		if !sessionSave(session, ctx) {
 			return
 		}
+
+		var query struct {
+			SignUp bool `form:"signup"`
+		}
+		if err := ctx.ShouldBindQuery(&query); err != nil {
+			common.Logger().Error("failed to bind query", zap.Error(err))
+			session.AddFlash("Invalid request")
+			if !sessionSave(session, ctx) {
+				return
+			}
+
+			ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL())
+			return
+		}
+
+		token := csrf.GetToken(ctx)
+		nonce, _ := common.GetNonce()
+
+		common.Logger().Debug("Displaying login page",
+			zap.String("nonce", nonce),
+			zap.Any("flash", flash),
+			zap.String("token", token),
+			zap.String("path", ctx.Request.URL.Path),
+			zap.Bool("setup_active", query.SignUp))
 
 		SetContentSecurityHeaders(ctx.Writer, nonce)
 		ctx.HTML(http.StatusOK, "login.html", gin.H{
 			"login_action": common.ConfigProxyRedirectLoginURL(),
+			"csp":          ctx.Writer.Header().Get("Content-Security-Policy"),
 			"csrf_token":   token,
 			"flash":        flash,
 			"nonce":        nonce,
-			"setup_action": common.ConfigProxyGenerateQRCodeURL(),
+			"qr_code":      common.ConfigProxyOtpSetupQrCode(),
+			"secret_key":   common.ConfigProxyOtpSetupURL(),
+			"setup_action": common.ConfigProxyRedirectLoginURL() + "?signup=true",
+			"setup_active": query.SignUp,
 		})
 	}
 }

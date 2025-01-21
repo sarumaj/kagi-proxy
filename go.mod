@@ -4,14 +4,15 @@ go 1.23.5
 
 require (
 	github.com/andybalholm/brotli v1.1.1
+	github.com/gin-contrib/cors v1.7.3
 	github.com/gin-contrib/sessions v1.0.2
 	github.com/gin-contrib/zap v1.1.4
 	github.com/gin-gonic/gin v1.10.0
-	github.com/icholy/replace v0.6.0
 	github.com/klauspost/compress v1.17.7
 	github.com/pquerna/otp v1.4.0
 	github.com/utrack/gin-csrf v0.0.0-20190424104817-40fb8d2c8fca
 	go.uber.org/zap v1.27.0
+	golang.org/x/crypto v0.32.0
 	golang.org/x/net v0.34.0
 	golang.org/x/time v0.9.0
 )
@@ -42,7 +43,6 @@ require (
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/arch v0.13.0 // indirect
-	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	google.golang.org/protobuf v1.36.3 // indirect

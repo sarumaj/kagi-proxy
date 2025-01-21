@@ -11,6 +11,11 @@ import (
 )
 
 // Rate is a middleware that limits the request rate.
+// It uses the token bucket algorithm to limit the request rate.
+// rps is the rate per second.
+// burst is the maximum number of requests that can be made at once.
+// It tries to wait for a token before processing the request.
+// If the rate limit is exceeded, it returns 429 Too Many Requests.
 func Rate(rps float64, burst int) gin.HandlerFunc {
 	limiter := rate.NewLimiter(rate.Limit(rps), burst)
 

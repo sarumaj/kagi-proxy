@@ -4,6 +4,7 @@ import (
 	"embed"
 	"encoding/json"
 	"io/fs"
+	"net/http"
 	"sync"
 
 	htmlTemplate "html/template"
@@ -16,6 +17,14 @@ var (
 			out, _ := json.Marshal(v)
 			return string(out)
 		},
+		"codeString": func(code int) string {
+			txt := http.StatusText(code)
+			if len(txt) > 0 {
+				return txt
+			}
+
+			return "Unknown Status Code"
+		},
 	}
 
 	//go:embed templates/*.html templates/*.js templates/*.css
@@ -25,6 +34,7 @@ var (
 )
 
 // HTMLTemplates returns the HTML templates.
+// *.css and *.js files are also included to support template injection.
 func HTMLTemplates() *htmlTemplate.Template {
 	if v, ok := syncMap.Load("html"); ok {
 		return v.(*htmlTemplate.Template)
@@ -37,6 +47,7 @@ func HTMLTemplates() *htmlTemplate.Template {
 }
 
 // TextTemplates returns the text templates.
+// At the moment, only proxy.js is included.
 func TextTemplates() *textTemplate.Template {
 	if v, ok := syncMap.Load("text"); ok {
 		return v.(*textTemplate.Template)

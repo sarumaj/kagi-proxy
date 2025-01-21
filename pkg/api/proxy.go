@@ -20,9 +20,9 @@ import (
 
 	"github.com/andybalholm/brotli"
 	"github.com/gin-gonic/gin"
-	"github.com/icholy/replace"
 	"github.com/klauspost/compress/zstd"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/net/html"
 
 	"github.com/sarumaj/kagi-proxy/pkg/common"
@@ -33,6 +33,7 @@ import (
 // It also modifies the request to use the target host specified in the
 // targetHostConfig.
 func Director(req *http.Request) {
+	// Modify the request to use the target host
 	req.URL.Scheme = "https"
 	targetHost := common.ConfigProxyTargetHosts().Get(req.Host, "kagi.com")
 	req.URL.Host, req.Host = targetHost, targetHost
@@ -44,6 +45,7 @@ func Director(req *http.Request) {
 
 	common.Logger().Debug("Session cookie not found in request")
 
+	// Establish a session
 	req.AddCookie(&http.Cookie{
 		Name:     "kagi_session",
 		Value:    common.ConfigSessionToken(),
@@ -79,22 +81,19 @@ func ErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
 		return
 	}
 
-	nonce, err := GetNonce()
-	if err != nil {
-		common.Logger().Error("Failed to generate nonce", zap.Error(err))
-	}
-
+	nonce, _ := common.GetNonce()
 	SetContentSecurityHeaders(w, nonce)
 	w.Header().Set("Content-Type", gin.MIMEHTML)
 	w.Header().Set("Retry-After", "30")
 	w.WriteHeader(http.StatusServiceUnavailable)
 
 	if err := HTMLTemplates().ExecuteTemplate(w, "error.html", map[string]any{
-		"error": html.EscapeString(err.Error()),
+		"csp":   w.Header().Get("Content-Security-Policy"),
 		"code":  http.StatusServiceUnavailable,
+		"error": html.EscapeString(err.Error()),
 		"nonce": nonce,
 	}); err != nil {
-		common.Logger().Error("Failed to execute error template", zap.Error(err))
+		common.Logger().Fatal("Failed to execute error template", zap.Error(err))
 	}
 }
 
@@ -109,6 +108,7 @@ func modifyCSP(csp string, scripts ...[]byte) string {
 		hashes = append(hashes, "'sha256-"+base64.StdEncoding.EncodeToString(hasher.Sum(nil))+"'")
 	}
 
+	// Split the directives
 	directives := strings.Split(csp, ";")
 	modified := make([]string, 0, len(directives))
 
@@ -130,8 +130,10 @@ func modifyCSP(csp string, scripts ...[]byte) string {
 		return
 	}
 
-	// Check if the script-src directive is present
+	// Flag whether the script-src directive is present
 	scriptSrcFound := false
+
+	// Iterate over the directives
 	for _, directive := range directives {
 		directive = strings.TrimSpace(directive)
 		if directive == "" {
@@ -149,6 +151,7 @@ func modifyCSP(csp string, scripts ...[]byte) string {
 		switch directiveName {
 		case "script-src", "script-src-elem":
 			scriptSrcFound = true
+			// include hashes and 'unsafe-inline' in script-src directive
 			newValues := append(hashes, extendDirective(directiveValues)...)
 			if !strings.Contains(strings.Join(newValues, " "), "'unsafe-inline'") {
 				newValues = append(newValues, "'unsafe-inline'")
@@ -169,7 +172,7 @@ func modifyCSP(csp string, scripts ...[]byte) string {
 		}
 	}
 
-	if !scriptSrcFound {
+	if !scriptSrcFound { // Add script-src directive if it is missing
 		modified = append(modified, strings.Join([]string{"script-src", strings.Join(hashes, " "), "'unsafe-inline'"}, " "))
 	}
 
@@ -180,27 +183,37 @@ func modifyCSP(csp string, scripts ...[]byte) string {
 // It injects a script that proxies requests to the target hosts specified in
 // the targetHostConfig.
 func ModifyResponse(resp *http.Response) error {
+	// Ignore non-HTML content
+	if contentType := resp.Header.Get("Content-Type"); resp.Body == nil || !strings.Contains(contentType, gin.MIMEHTML) {
+		return nil
+	}
+
+	// Hash the proxy user to allow authentication over session link with the proxy_token query parameter
+	hash, err := bcrypt.GenerateFromPassword([]byte(common.ConfigProxyUser()), 12)
+	if err != nil {
+		common.Logger().Error("Failed to hash proxy user", zap.Error(err))
+		return err
+	}
+
+	// Generate the proxy script
 	var script bytes.Buffer
 	if err := TextTemplates().ExecuteTemplate(&script, "proxy.js", map[string]any{
-		"host_map": common.ConfigProxyTargetHosts(),
+		"host_map":    common.ConfigProxyTargetHosts(),
+		"proxy_token": common.B64URLNoPadding.EncodeToString(hash),
 	}); err != nil {
 		return err
 	}
 
+	// Modify the Content-Security-Policy header
 	if csp := resp.Header.Get("Content-Security-Policy"); len(csp) > 0 {
 		resp.Header.Set("Content-Security-Policy", modifyCSP(csp, script.Bytes()))
-	}
-
-	if contentType := resp.Header.Get("Content-Type"); resp.Body == nil || !strings.Contains(contentType, gin.MIMEHTML) {
-		return nil
 	}
 
 	contentEncoding := strings.ToLower(resp.Header.Get("Content-Encoding"))
 	common.Logger().Debug("Modifying response", zap.String("contentEncoding", contentEncoding))
 
-	// Setup decompression
+	// Support decompression of the response
 	var reader io.ReadCloser
-	var err error
 	switch contentEncoding {
 	case "gzip":
 		reader, err = gzip.NewReader(resp.Body)
@@ -229,10 +242,21 @@ func ModifyResponse(resp *http.Response) error {
 
 	defer reader.Close()
 
-	// Chain the transformers
-	reader = common.Closer(replace.Chain(reader, replace.String(`<head>`, "<head>\n\t\t<script>"+script.String()+"</script>")))
+	// Eat up the response body
+	var body []byte
+	if body, err = io.ReadAll(reader); err != nil {
+		return err
+	}
 
-	// Compress the modified content
+	// Inject the proxy script into the response body
+	reader = common.Closer(strings.NewReader(strings.Replace(
+		string(body),
+		"<head>",
+		"<head>\n\t\t<script>"+script.String()+"</script>",
+		1,
+	)))
+
+	// Re-compress the response body and attribute for the new content length
 	var compressedContent bytes.Buffer
 	var writer io.WriteCloser
 	switch contentEncoding {
@@ -266,12 +290,13 @@ func ModifyResponse(resp *http.Response) error {
 	resp.Body = common.Closer(&compressedContent)
 	resp.ContentLength = int64(compressedContent.Len())
 	resp.Header.Set("Content-Length", strconv.Itoa(compressedContent.Len()))
-	resp.TransferEncoding = nil // Remove chunked encoding since we know the content length
-
+	resp.TransferEncoding = nil // Remove chunked encoding since content length is known
 	return nil
 }
 
 // ProxyPass is a middleware that proxies requests to the kagi.com and *.kagi.com servers.
+// It also injects a session token into the request if it is not already present.
+// It applies custom reverse proxy with mutation observer, CSP handling, and response compression.
 func ProxyPass() gin.HandlerFunc {
 	rootCAs, err := x509.SystemCertPool()
 	if err != nil {
@@ -281,8 +306,8 @@ func ProxyPass() gin.HandlerFunc {
 
 	proxy := &httputil.ReverseProxy{
 		Transport:      &http.Transport{TLSClientConfig: &tls.Config{RootCAs: rootCAs}},
-		ErrorLog:       log.New(io.Discard, "", 0),
-		Director:       Director,
+		ErrorLog:       log.New(io.Discard, "", 0), // Disable logging
+		Director:       Director,                   // Either Director or Rewrite must be set
 		ModifyResponse: ModifyResponse,
 		ErrorHandler:   ErrorHandler,
 	}
@@ -291,6 +316,8 @@ func ProxyPass() gin.HandlerFunc {
 }
 
 // ValidateProxySession checks if the user is authenticated.
+// It checks for a session token in the request query and cookie.
+// It returns true if the session token is found and valid.
 func ValidateProxySession(req *http.Request) bool {
 	targetHost := common.ConfigProxyTargetHosts().Get(req.Host, "kagi.com")
 

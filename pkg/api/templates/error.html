@@ -2,24 +2,59 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>503 Service Unavailable</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="theme-color" content="#1a73e8" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta http-equiv="Content-Security-Policy" content="{{ .csp }}" />
+    <title>{{ .code }} {{ codeString .code }}</title>
     <style nonce="{{ .nonce }}">
       /* {{ template "error.css" . }} */
     </style>
   </head>
   <body>
     <div class="container">
-      <h1>Service Temporarily Unavailable</h1>
+      <h1>{{ codeString .code }}</h1>
+      <!--{{ if ge .code 500 }}-->
       <p>
         We're sorry, but the service you're trying to reach is currently
         unavailable.
       </p>
+      <!--{{ else if or (eq .code 401) (eq .code 403) }}-->
+      <p>
+        You are not authorized to access this service. Please contact your
+        administrator.
+      </p>
+      <!--{{ else }}-->
+      <p>
+        Something went wrong? Please check the URL and try again. If you feel
+        this is an error, please contact your administrator.
+      </p>
+      <!--{{ end }}-->
+      <!--{{ if ge .code 500 }}-->
       <p>Please try again in a few moments.</p>
+      <!--{{ end }}-->
+      <!--{{ if .error }}-->
       <div class="error-details">{{ .error }}</div>
-      <a href="javascript:window.location.reload()" class="retry-button"
-        >Retry</a
-      >
+      <!--{{ end }}-->
+      <!--{{ if ge .code 500 }}-->
+      <button id="retryButton" class="retry-button">Retry</button>
+      <script nonce="{{ .nonce }}">
+        document.getElementById("retryButton").addEventListener("click", () => {
+          window.location.reload();
+        });
+      </script>
+      <!--{{ else }}-->
+      <button id="backButton" class="retry-button">Go Back</button>
+      <script nonce="{{ .nonce }}">
+        document.getElementById("backButton").addEventListener("click", () => {
+          window.history.back();
+        });
+      </script>
+      <!--{{ end }}-->
       <div class="error-code">Error {{ .code }}</div>
     </div>
   </body>

@@ -1,6 +1,7 @@
 package common
 
 import (
+	"html/template"
 	"strings"
 	"sync"
 
@@ -10,22 +11,22 @@ import (
 var (
 	configMux sync.Mutex
 	config    = cfg{
-		ProxyTargetHosts:       hosts{},
-		ProxyRedirectLoginURL:  "/signin",
-		ProxyGenerateQRCodeURL: "/generate-otp",
+		ProxyTargetHosts:      hosts{},
+		ProxyRedirectLoginURL: "/signin",
 	}
 )
 
 type (
 	cfg struct {
-		ProxyUser              string
-		ProxyPass              string
-		ProxyOTPSecret         string
-		ProxyGenerateQRCodeURL string
-		ProxyRedirectLoginURL  string
-		CsrfSecret             string
-		SessionToken           string
-		ProxyTargetHosts       hosts
+		CsrfSecret            string
+		ProxyPass             string
+		ProxyOTPSecret        string
+		ProxyOtpSetupQrCode   template.HTML
+		ProxyOtpSetupURL      string
+		ProxyRedirectLoginURL string
+		ProxyTargetHosts      hosts
+		ProxyUser             string
+		SessionToken          string
 	}
 
 	option func(*cfg)
@@ -56,11 +57,11 @@ func (t hosts) Get(host, def string) string {
 	return "NXDOMAIN"
 }
 
-// ConfigProxyUser returns the proxy user.
-func ConfigProxyUser() string {
+// ConfigCsrfSecret returns the CSRF secret.
+func ConfigCsrfSecret() string {
 	configMux.Lock()
 	defer configMux.Unlock()
-	return config.ProxyUser
+	return config.CsrfSecret
 }
 
 // ConfigProxyPass returns the proxy password.
@@ -77,11 +78,18 @@ func ConfigProxyOTPSecret() string {
 	return config.ProxyOTPSecret
 }
 
-// ConfigProxyGenerateQRCodeURL returns the proxy QR code generation URL.
-func ConfigProxyGenerateQRCodeURL() string {
+// ConfigProxyOtpSetupQrCode returns the proxy OTP setup QR code.
+func ConfigProxyOtpSetupQrCode() template.HTML {
 	configMux.Lock()
 	defer configMux.Unlock()
-	return config.ProxyGenerateQRCodeURL
+	return config.ProxyOtpSetupQrCode
+}
+
+// ConfigProxyOtpSetupURL returns the proxy OTP setup URL.
+func ConfigProxyOtpSetupURL() string {
+	configMux.Lock()
+	defer configMux.Unlock()
+	return config.ProxyOtpSetupURL
 }
 
 // ConfigProxyRedirectLoginURL returns the proxy redirect login URL.
@@ -91,11 +99,18 @@ func ConfigProxyRedirectLoginURL() string {
 	return config.ProxyRedirectLoginURL
 }
 
-// ConfigCsrfSecret returns the CSRF secret.
-func ConfigCsrfSecret() string {
+// ConfigProxyTargetHosts returns the proxy target hosts.
+func ConfigProxyTargetHosts() hosts {
 	configMux.Lock()
 	defer configMux.Unlock()
-	return config.CsrfSecret
+	return config.ProxyTargetHosts
+}
+
+// ConfigProxyUser returns the proxy user.
+func ConfigProxyUser() string {
+	configMux.Lock()
+	defer configMux.Unlock()
+	return config.ProxyUser
 }
 
 // ConfigSessionToken returns the session token.
@@ -105,13 +120,6 @@ func ConfigSessionToken() string {
 	return config.SessionToken
 }
 
-// ConfigProxyTargetHosts returns the proxy target hosts.
-func ConfigProxyTargetHosts() hosts {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxyTargetHosts
-}
-
 // ConfigureProxy configures the proxy.
 func ConfigureProxy(opts ...option) {
 	for _, opt := range opts {
@@ -119,11 +127,11 @@ func ConfigureProxy(opts ...option) {
 	}
 }
 
-// WithProxyUser sets the proxy user.
-func WithProxyUser(user string) option {
+// WithCsrfSecret sets the CSRF secret.
+func WithCsrfSecret(secret string) option {
 	return func(pc *cfg) {
 		configMux.Lock()
-		pc.ProxyUser = user
+		pc.CsrfSecret = secret
 		configMux.Unlock()
 	}
 }
@@ -146,11 +154,20 @@ func WithProxyOTPSecret(secret string) option {
 	}
 }
 
-// WithProxyGenerateQRCodeURL sets the proxy QR code generation URL.
-func WithProxyGenerateQRCodeURL(url string) option {
+// WithProxyOtpSetupQrCode sets the proxy OTP setup QR code.
+func WithProxyOtpSetupQrCode(qrCode template.HTML) option {
 	return func(pc *cfg) {
 		configMux.Lock()
-		pc.ProxyGenerateQRCodeURL = url
+		pc.ProxyOtpSetupQrCode = qrCode
+		configMux.Unlock()
+	}
+}
+
+// WithProxyOtpSetupURL sets the proxy OTP setup URL.
+func WithProxyOtpSetupURL(url string) option {
+	return func(pc *cfg) {
+		configMux.Lock()
+		pc.ProxyOtpSetupURL = url
 		configMux.Unlock()
 	}
 }
@@ -160,15 +177,6 @@ func WithProxyRedirectLoginURL(url string) option {
 	return func(pc *cfg) {
 		configMux.Lock()
 		pc.ProxyRedirectLoginURL = url
-		configMux.Unlock()
-	}
-}
-
-// WithCsrfSecret sets the CSRF secret.
-func WithCsrfSecret(secret string) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.CsrfSecret = secret
 		configMux.Unlock()
 	}
 }
@@ -190,5 +198,14 @@ func WithProxyTargetHosts(hosts map[string]string) option {
 			pc.ProxyTargetHosts = hosts
 			configMux.Unlock()
 		}
+	}
+}
+
+// WithProxyUser sets the proxy user.
+func WithProxyUser(user string) option {
+	return func(pc *cfg) {
+		configMux.Lock()
+		pc.ProxyUser = user
+		configMux.Unlock()
 	}
 }

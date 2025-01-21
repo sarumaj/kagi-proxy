@@ -13,6 +13,8 @@ func init() {
 	logger = Logger()
 }
 
+// Logger returns the logger.
+// It uses the development logger by default.
 func Logger() *zap.Logger {
 	if logger != nil {
 		return logger

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	ginzap "github.com/gin-contrib/zap"
@@ -64,18 +65,19 @@ func main() {
 			*proxyHost:                "kagi.com",
 			"translate." + *proxyHost: "translate.kagi.com",
 			"assets." + *proxyHost:    "assets.kagi.com",
+			"status" + *proxyHost:     "status.kagi.com",
 		}),
 		common.WithProxyRedirectLoginURL("/signin"),
-		common.WithProxyGenerateQRCodeURL("/signup"),
 	)
 
 	environ = os.Environ()
 	slices.Sort(environ)
-	common.Logger().Info("Environment variables", zap.Strings("environ", environ))
+	common.Logger().Debug("Environment variables", zap.Strings("environ", environ))
 
 	router := gin.New(func(e *gin.Engine) {
 		// Create a new cookie store.
-		store := cookie.NewStore([]byte(*proxySessionSecret))
+		hashKey, blockKey := common.MakeKeyPair([]byte(*proxySessionSecret))
+		store := cookie.NewStore(hashKey, blockKey)
 		store.Options(sessions.Options{
 			Domain:   *proxyHost, // Required to support wildcard subdomains
 			Path:     "/",
@@ -85,6 +87,23 @@ func main() {
 			SameSite: http.SameSiteLaxMode,
 		})
 		e.Use(sessions.Sessions("proxy_session", store))
+
+		// Setup CORS
+		config := cors.DefaultConfig()
+		config.AllowCredentials = true
+		config.AllowBrowserExtensions = true
+		config.AllowWebSockets = true
+		config.AddAllowHeaders("X-Requested-With")
+		config.AllowOrigins = append(config.AllowOrigins,
+			"http://localhost:"+fmt.Sprint(*port),
+			"https://kagi.com",
+			"https://"+*proxyHost,
+			"https://*.kagi.com",
+			"https://*."+*proxyHost,
+		)
+		config.AddExposeHeaders("Location", "Content-Disposition")
+		config.AllowWildcard = true
+		e.Use(cors.New(config))
 
 		// Use the ginzap middleware to log requests.
 		e.Use(ginzap.GinzapWithConfig(common.Logger(), &ginzap.Config{
@@ -96,7 +115,8 @@ func main() {
 
 		// Use the ginzap middleware to log panics.
 		e.Use(ginzap.CustomRecoveryWithZap(common.Logger(), true, func(c *gin.Context, err any) {
-			nonce, _ := api.GetNonce()
+			nonce, _ := common.GetNonce()
+			api.SetContentSecurityHeaders(c.Writer, nonce)
 			c.HTML(http.StatusInternalServerError, "error.html", gin.H{
 				"error": html.EscapeString(fmt.Errorf("%v", err).Error()),
 				"code":  http.StatusInternalServerError,
@@ -119,15 +139,14 @@ func main() {
 		login.GET("/", api.ShowLogin())
 		login.POST("/", api.HandleLogin())
 	}
-	router.POST("/signup", api.GenerateOTP())
 
 	// Overwrite the logout route.
 	router.GET("/logout", api.HandleLogout())
 
 	// Overwrite the settings route.
-	router.GET("/settings", api.HandleLogout())
+	router.GET("/settings", api.HandleUnauthorized())
 
-	// Add a proxy route.
+	// Add a proxy route for anything else, do not require authentication for the favicon.
 	router.NoRoute(api.BasicAuth([]string{"/favicon.ico"}), api.ProxyPass())
 
 	// Start the server.

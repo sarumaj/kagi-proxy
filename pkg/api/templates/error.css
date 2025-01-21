@@ -59,10 +59,13 @@ p {
   border-radius: 4px;
   color: white;
   display: inline-block;
+  align-items: center;
   margin-top: 20px;
   padding: 10px 20px;
   text-decoration: none;
   transition: background 0.3s;
+  font-size: 1rem;
+  cursor: pointer;
 }
 
 .retry-button:hover {
