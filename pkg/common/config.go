@@ -1,7 +1,6 @@
 package common
 
 import (
-	"html/template"
 	"strings"
 	"sync"
 
@@ -21,8 +20,6 @@ type (
 		CsrfSecret            string
 		ProxyPass             string
 		ProxyOTPSecret        string
-		ProxyOtpSetupQrCode   template.HTML
-		ProxyOtpSetupURL      string
 		ProxyRedirectLoginURL string
 		ProxyTargetHosts      hosts
 		ProxyUser             string
@@ -76,20 +73,6 @@ func ConfigProxyOTPSecret() string {
 	configMux.Lock()
 	defer configMux.Unlock()
 	return config.ProxyOTPSecret
-}
-
-// ConfigProxyOtpSetupQrCode returns the proxy OTP setup QR code.
-func ConfigProxyOtpSetupQrCode() template.HTML {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxyOtpSetupQrCode
-}
-
-// ConfigProxyOtpSetupURL returns the proxy OTP setup URL.
-func ConfigProxyOtpSetupURL() string {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxyOtpSetupURL
 }
 
 // ConfigProxyRedirectLoginURL returns the proxy redirect login URL.
@@ -150,24 +133,6 @@ func WithProxyOTPSecret(secret string) option {
 	return func(pc *cfg) {
 		configMux.Lock()
 		pc.ProxyOTPSecret = secret
-		configMux.Unlock()
-	}
-}
-
-// WithProxyOtpSetupQrCode sets the proxy OTP setup QR code.
-func WithProxyOtpSetupQrCode(qrCode template.HTML) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.ProxyOtpSetupQrCode = qrCode
-		configMux.Unlock()
-	}
-}
-
-// WithProxyOtpSetupURL sets the proxy OTP setup URL.
-func WithProxyOtpSetupURL(url string) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.ProxyOtpSetupURL = url
 		configMux.Unlock()
 	}
 }

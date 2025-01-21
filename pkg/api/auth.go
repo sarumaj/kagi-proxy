@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"crypto/subtle"
-	"encoding/base64"
 	"html"
 	"html/template"
 	"image/png"
@@ -212,16 +211,29 @@ func HandleLogin() gin.HandlerFunc {
 				return
 			}
 
-			// Distribute the QR code and the OTP setup URL
-			common.ConfigureProxy(
-				common.WithProxyOtpSetupQrCode(template.HTML(`<img src="data:image/png;base64,`+
-					base64.StdEncoding.EncodeToString(buf.Bytes())+
-					`" alt="QR code" />`)),
-				common.WithProxyOtpSetupURL(key.URL()),
-			)
+			// In following the content of the page will get update over PRG pattern:
+			// 1. POST request to /signin?signup=true to generate the QR code and the OTP setup URL
+			// 2. Redirect to /signin?signup=true to force reloading the page
+			// 3. GET request to /signin?signup=true to display the QR code and the OTP setup URL
+
+			// Encode the QR code and the OTP setup URL in location fragment
+
+			param, err := common.EncodeForQuery(map[string]any{
+				"qr_code":    `<img src="data:image/png;base64,` + common.B64StdWithPadding.EncodeToString(buf.Bytes()) + `" alt="QR code" />`,
+				"secret_key": key.URL(),
+			}, []byte(common.ConfigProxyPass()))
+			if err != nil {
+				common.Logger().Error("failed to encode query parameter", zap.Error(err))
+				session.AddFlash("Internal server error")
+				if !sessionSave(session, ctx) {
+					return
+				}
+				ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL()+"?signup=true")
+				return
+			}
 
 			// Redirect to force reloading the page
-			ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL()+"?signup=true")
+			ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL()+"?signup=true&data="+param)
 			return
 		}
 
@@ -379,7 +391,8 @@ func ShowLogin() gin.HandlerFunc {
 		}
 
 		var query struct {
-			SignUp bool `form:"signup"`
+			SignUp bool   `form:"signup"`
+			Data   string `form:"data"`
 		}
 		if err := ctx.ShouldBindQuery(&query); err != nil {
 			common.Logger().Error("failed to bind query", zap.Error(err))
@@ -395,12 +408,19 @@ func ShowLogin() gin.HandlerFunc {
 		token := csrf.GetToken(ctx)
 		nonce, _ := common.GetNonce()
 
+		// Decode the QR code and the OTP setup URL from the location fragment
+		data, err := common.DecodeFromQuery(query.Data)
+		if err != nil {
+			common.Logger().Warn("failed to decode data from query", zap.Error(err))
+		}
+
 		common.Logger().Debug("Displaying login page",
 			zap.String("nonce", nonce),
 			zap.Any("flash", flash),
 			zap.String("token", token),
 			zap.String("path", ctx.Request.URL.Path),
-			zap.Bool("setup_active", query.SignUp))
+			zap.Bool("setup_active", query.SignUp),
+			zap.Reflect("data", data))
 
 		SetContentSecurityHeaders(ctx.Writer, nonce)
 		ctx.HTML(http.StatusOK, "login.html", gin.H{
@@ -409,8 +429,8 @@ func ShowLogin() gin.HandlerFunc {
 			"csrf_token":   token,
 			"flash":        flash,
 			"nonce":        nonce,
-			"qr_code":      common.ConfigProxyOtpSetupQrCode(),
-			"secret_key":   common.ConfigProxyOtpSetupURL(),
+			"qr_code":      template.HTML(common.QuickGet[string](data, "qr_code")),
+			"secret_key":   common.QuickGet[string](data, "secret_key"),
 			"setup_action": common.ConfigProxyRedirectLoginURL() + "?signup=true",
 			"setup_active": query.SignUp,
 		})

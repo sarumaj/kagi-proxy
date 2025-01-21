@@ -51,6 +51,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const otpFields = document.querySelectorAll(".otp-field");
   const otpContainer = document.querySelector(".otp-fields");
   const tabs = document.querySelectorAll(".tab");
+  const qrContainer = document.getElementById("qr-container");
 
   // Validate required elements
   for (const [selector, element] of Object.entries({
@@ -64,6 +65,7 @@ document.addEventListener("DOMContentLoaded", function () {
     ".otp-field": otpFields,
     ".otp-fields": otpContainer,
     ".tab": tabs,
+    "qr-container": qrContainer,
   })) {
     if (!element) {
       console.error(`Required element with selector: "${selector}" not found`);
