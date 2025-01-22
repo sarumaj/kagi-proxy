@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"html"
 	"html/template"
 	"image/png"
@@ -98,11 +97,6 @@ func CSRF() gin.HandlerFunc {
 	})
 }
 
-// CTEqual is a constant-time comparison function.
-func CTEqual[S interface{ ~string | ~[]byte }](a, b S) bool {
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
-}
-
 // HandleLogin is a handler that authenticates the user.
 // If the user is not authenticated, it redirects to the login page.
 // If the user is authenticated, it redirects to the root page or
@@ -156,7 +150,7 @@ func HandleLogin() gin.HandlerFunc {
 				return
 			}
 
-			validUsername := CTEqual(request.Username, common.ConfigProxyUser())
+			validUsername := common.CTEqual(request.Username, common.ConfigProxyUser())
 			if !validUsername {
 				common.Logger().Info("invalid username", zap.String("username", request.Username))
 				session.AddFlash("Invalid username")
@@ -217,11 +211,10 @@ func HandleLogin() gin.HandlerFunc {
 			// 3. GET request to /signin?signup=true to display the QR code and the OTP setup URL
 
 			// Encode the QR code and the OTP setup URL in location fragment
-
 			param, err := common.EncodeForQuery(map[string]any{
 				"qr_code":    `<img src="data:image/png;base64,` + common.B64StdWithPadding.EncodeToString(buf.Bytes()) + `" alt="QR code" />`,
 				"secret_key": key.URL(),
-			}, []byte(common.ConfigProxyPass()))
+			}, []byte(common.ConfigProxyPass()), session)
 			if err != nil {
 				common.Logger().Error("failed to encode query parameter", zap.Error(err))
 				session.AddFlash("Internal server error")
@@ -229,6 +222,9 @@ func HandleLogin() gin.HandlerFunc {
 					return
 				}
 				ctx.Redirect(http.StatusSeeOther, common.ConfigProxyRedirectLoginURL()+"?signup=true")
+				return
+			}
+			if !sessionSave(session, ctx) {
 				return
 			}
 
@@ -255,8 +251,8 @@ func HandleLogin() gin.HandlerFunc {
 		}
 
 		// Validate the user credentials
-		validUsername := CTEqual(request.Username, common.ConfigProxyUser())
-		validPassword := CTEqual(request.Password, common.ConfigProxyPass())
+		validUsername := common.CTEqual(request.Username, common.ConfigProxyUser())
+		validPassword := common.CTEqual(request.Password, common.ConfigProxyPass())
 		validOTP, err := totp.ValidateCustom(
 			request.OTP,
 			common.B32StdNoPadding.EncodeToString([]byte(common.ConfigProxyOTPSecret())),
@@ -409,9 +405,11 @@ func ShowLogin() gin.HandlerFunc {
 		nonce, _ := common.GetNonce()
 
 		// Decode the QR code and the OTP setup URL from the location fragment
-		data, err := common.DecodeFromQuery(query.Data)
+		data, err := common.DecodeFromQuery(query.Data, []byte(common.ConfigProxyPass()), session)
 		if err != nil {
 			common.Logger().Warn("failed to decode data from query", zap.Error(err))
+		} else if !sessionSave(session, ctx) {
+			return
 		}
 
 		common.Logger().Debug("Displaying login page",

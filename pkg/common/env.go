@@ -44,3 +44,68 @@ func Getenv[T any](key string, fallback T) (out T) {
 
 	}
 }
+
+// QuickGet is a type assertion helper for getting values from a map or an interface.
+// It supports the following types:
+// - map[string]T
+// - map[string]any
+// - interface{ Get(string) T }
+// - interface{ Get(string) any }
+// - interface{ Get(string) (T, bool) }
+// - interface{ Get(string) (any, bool) }
+// - interface{ Get(any) T }
+// - interface{ Get(any) any }
+// - interface{ Get(any) (T, bool) }
+// - interface{ Get(any) (any, bool) }
+func QuickGet[T, M any](m M, key string) (val T) {
+	switch m := any(m).(type) {
+	case map[string]T:
+		return m[key]
+
+	case map[string]any:
+		v, _ := m[key].(T)
+		return v
+
+	case map[any]T:
+		return m[key]
+
+	case map[any]any:
+		v, _ := m[key].(T)
+		return v
+
+	case interface{ Get(string) T }:
+		return m.Get(key)
+
+	case interface{ Get(string) (T, bool) }:
+		v, _ := m.Get(key)
+		return v
+
+	case interface{ Get(string) any }:
+		v, _ := m.Get(key).(T)
+		return v
+
+	case interface{ Get(string) (any, bool) }:
+		v, _ := m.Get(key)
+		v2, _ := v.(T)
+		return v2
+
+	case interface{ Get(any) T }:
+		return m.Get(key)
+
+	case interface{ Get(any) (T, bool) }:
+		v, _ := m.Get(key)
+		return v
+
+	case interface{ Get(any) any }:
+		v, _ := m.Get(key).(T)
+		return v
+
+	case interface{ Get(any) (any, bool) }:
+		v, _ := m.Get(key)
+		v2, _ := v.(T)
+		return v2
+
+	}
+
+	return
+}

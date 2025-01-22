@@ -4,18 +4,18 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"sync"
 	"time"
+
+	"github.com/gin-contrib/sessions"
 )
 
 var (
-	hashes sync.Map
-
 	// B64StdWithPadding is a base64 encoding with standard padding.
 	B64StdWithPadding = base64.StdEncoding.WithPadding(base64.StdPadding)
 
@@ -26,11 +26,21 @@ var (
 	B32StdNoPadding = base32.StdEncoding.WithPadding(base32.NoPadding)
 )
 
+// CTEqual is a constant-time comparison function.
+func CTEqual[S interface{ ~string | ~[]byte }](a, b S) bool {
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+}
+
 // DecodeFromQuery decodes a URL query parameter into a map.
-// It uses the HMAC to verify the integrity of the data.
-func DecodeFromQuery(in string) (map[string]any, error) {
+// It uses the HMAC checksum stored in the session to verify the integrity of the data.
+// The session has to be saved after calling this function.
+func DecodeFromQuery(in string, secret []byte, session sessions.Session) (map[string]any, error) {
 	if len(in) == 0 {
 		return nil, fmt.Errorf("empty input")
+	}
+
+	if len(secret) == 0 {
+		return nil, fmt.Errorf("empty secret")
 	}
 
 	enc, err := url.QueryUnescape(in)
@@ -38,14 +48,24 @@ func DecodeFromQuery(in string) (map[string]any, error) {
 		return nil, err
 	}
 
-	data, ok := hashes.LoadAndDelete(enc)
-	if !ok {
-		return nil, fmt.Errorf("hash not found")
+	data, err := B64URLNoPadding.DecodeString(enc)
+	if err != nil {
+		return nil, err
 	}
 
-	out, ok := data.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("invalid data type")
+	h := hmac.New(sha256.New, secret)
+	if _, err := h.Write(data); err != nil {
+		return nil, err
+	}
+
+	defer session.Delete("checksum")
+	if !CTEqual(B64StdWithPadding.EncodeToString(h.Sum(nil)), QuickGet[string](session, "checksum")) {
+		return nil, fmt.Errorf("checksum mismatch")
+	}
+
+	var out map[string]any
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, err
 	}
 
 	return out, nil
@@ -53,8 +73,10 @@ func DecodeFromQuery(in string) (map[string]any, error) {
 
 // EncodeForQuery encodes the input map into a URL query parameter.
 // It uses JSON encoding and base64 URL safe encoding without padding.
-// It also calculates the HMAC of the JSON data using the provided secret.
-func EncodeForQuery(in map[string]any, secret []byte) (string, error) {
+// It also calculates the HMAC checksum of the JSON data using the provided secret
+// and stores it in the session. Checksum is used to verify the integrity of the data.
+// The session has to be saved after calling this function.
+func EncodeForQuery(in map[string]any, secret []byte, session sessions.Session) (string, error) {
 	if len(in) == 0 {
 		return "", fmt.Errorf("empty input")
 	}
@@ -73,10 +95,8 @@ func EncodeForQuery(in map[string]any, secret []byte) (string, error) {
 		return "", err
 	}
 
-	sum := B64URLNoPadding.EncodeToString(h.Sum(nil))
-	hashes.Store(sum, in)
-
-	return url.QueryEscape(sum), nil
+	session.Set("checksum", B64StdWithPadding.EncodeToString(h.Sum(nil)))
+	return url.QueryEscape(B64URLNoPadding.EncodeToString(data)), nil
 }
 
 // GetNonce generates a random nonce.

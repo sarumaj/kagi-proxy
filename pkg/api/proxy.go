@@ -322,7 +322,7 @@ func ValidateProxySession(req *http.Request) bool {
 	targetHost := common.ConfigProxyTargetHosts().Get(req.Host, "kagi.com")
 
 	token := req.URL.Query().Get("token")
-	if len(token) > 0 && CTEqual(token, common.ConfigSessionToken()) {
+	if len(token) > 0 && common.CTEqual(token, common.ConfigSessionToken()) {
 		common.Logger().Debug("Session token found in request query", zap.String("sessionToken", token))
 		return true
 	}
@@ -330,7 +330,7 @@ func ValidateProxySession(req *http.Request) bool {
 	cookie, err := req.Cookie("kagi_session")
 	common.Logger().Debug("Checking for session token in request cookie", zap.Error(err), zap.Reflect("cookie", cookie))
 	switch {
-	case err != nil, cookie == nil, len(cookie.Value) == 0, CTEqual(cookie.Value, common.ConfigSessionToken()),
+	case err != nil, cookie == nil, len(cookie.Value) == 0, common.CTEqual(cookie.Value, common.ConfigSessionToken()),
 		cookie.Domain != targetHost && cookie.Domain != "."+targetHost && len(cookie.Domain) != 0:
 
 		return false

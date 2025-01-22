@@ -241,8 +241,8 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  // Cleanup function
-  function cleanup() {
+  // Unregister event listeners
+  const unregister = () => {
     loginForm.removeEventListener("submit", handleLoginSubmit);
     passwordToggleButton.removeEventListener("click", handleToggle);
     otpContainer.removeEventListener("click", null);
@@ -263,8 +263,24 @@ document.addEventListener("DOMContentLoaded", function () {
     tabs.forEach((tab) => {
       tab.removeEventListener("click", null);
     });
-  }
+  };
 
-  // Cleanup on unload
-  window.addEventListener("unload", cleanup);
+  const cleanup = () => {
+    // Clear QR code container
+    qrContainer.setAttribute("data-hidden", "true");
+    qrContainer.querySelectorAll("div").forEach((div) => {
+      div.innerHTML = "";
+    });
+  };
+
+  window.addEventListener("unload", () => {
+    cleanup();
+    unregister();
+  });
+
+  window.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      cleanup();
+    }
+  });
 });
