@@ -18,6 +18,7 @@ var (
 type (
 	cfg struct {
 		CsrfSecret            string
+		ProxyGuardRules       Ruleset
 		ProxyPass             string
 		ProxyOTPSecret        string
 		ProxyRedirectLoginURL string
@@ -59,6 +60,13 @@ func ConfigCsrfSecret() string {
 	configMux.Lock()
 	defer configMux.Unlock()
 	return config.CsrfSecret
+}
+
+// ConfigProxyGuardRules returns the proxy guard rules.
+func ConfigProxyGuardRules() Ruleset {
+	configMux.Lock()
+	defer configMux.Unlock()
+	return config.ProxyGuardRules
 }
 
 // ConfigProxyPass returns the proxy password.
@@ -115,6 +123,15 @@ func WithCsrfSecret(secret string) option {
 	return func(pc *cfg) {
 		configMux.Lock()
 		pc.CsrfSecret = secret
+		configMux.Unlock()
+	}
+}
+
+// WithProxyGuardRules sets the proxy guard rules.
+func WithProxyGuardRules(rules Ruleset) option {
+	return func(pc *cfg) {
+		configMux.Lock()
+		pc.ProxyGuardRules = rules
 		configMux.Unlock()
 	}
 }

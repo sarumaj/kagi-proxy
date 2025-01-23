@@ -8,7 +8,9 @@ require (
 	github.com/gin-contrib/sessions v1.0.2
 	github.com/gin-contrib/zap v1.1.4
 	github.com/gin-gonic/gin v1.10.0
+	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.17.7
+	github.com/nursik/go-expire-map v1.2.0
 	github.com/pquerna/otp v1.4.0
 	github.com/utrack/gin-csrf v0.0.0-20190424104817-40fb8d2c8fca
 	go.uber.org/zap v1.27.0

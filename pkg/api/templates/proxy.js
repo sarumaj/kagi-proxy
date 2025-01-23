@@ -1,17 +1,11 @@
 // proxy.js
 (function () {
   const proxyToken = `{{ .proxy_token }}`;
-  const originalHostMap = JSON.parse(`{{ json .host_map }}`);
+  const originalHostMap = JSON.parse(`{{ .host_map | json }}`);
   const hostMap = Object.fromEntries(
     Object.entries(originalHostMap).map(([proxy, target]) => [target, proxy])
   );
-
-  // Make sure the logEvent function is defined when running in proxy mode
-  window.logEvent =
-    window.logEvent ||
-    function () {
-      console.debug("Logging disabled in proxy mode");
-    };
+  const forbiddenPaths = JSON.parse(`{{ .forbidden_paths | json }}`);
 
   // replaceHost function replaces the host of the given URL with the proxy domain
   // and appends the proxy token if the original URL contains a token
@@ -73,12 +67,24 @@
 
   // processNode function replaces URLs in the given DOM node
   // and its children
+  // It also hides certain elements in the settings page
   const processNode = (node) => {
     // Handle attributes
     if (node.nodeType === Node.ELEMENT_NODE) {
       ["href", "src", "action", "data-url"].forEach((attr) => {
         if (node.hasAttribute(attr)) {
           const attrValue = node.getAttribute(attr);
+
+          forbiddenPaths.forEach((path) => {
+            const pattern = new RegExp(path);
+            if (pattern.test(attrValue)) {
+              node.style.opacity = "0.6";
+              node.style.pointerEvents = "none";
+              node.style.cursor = "not-allowed";
+              node.disabled = true;
+            }
+          });
+
           let newValue = attrValue;
 
           // Handle javascript: URLs
@@ -147,18 +153,82 @@
   // Handle dynamic XHR/Fetch requests
   const originalFetch = window.fetch;
   window.fetch = function (input, init) {
+    // Initialize headers if not present
+    init = init || {};
+    init.headers = new Headers(init.headers || {});
+
+    // Add CORS headers
+    init.credentials = "include";
+    init.headers.set("X-Requested-With", "XMLHttpRequest");
+
+    // Process URL
     if (typeof input === "string") {
       input = replaceHost(input);
     } else if (input instanceof Request) {
-      input = new Request(replaceHost(input.url), input);
+      const newHeaders = new Headers(input.headers);
+      newHeaders.set("X-Requested-With", "XMLHttpRequest");
+
+      input = new Request(replaceHost(input.url), {
+        ...input,
+        credentials: "include",
+        headers: newHeaders,
+      });
     }
-    return originalFetch.call(this, input, init);
+
+    try {
+      return originalFetch.call(this, input, init);
+    } catch (e) {
+      console.debug("Retrying fetch with no-cors mode:", e);
+      // Retry with no-cors mode
+      init = init || {};
+      init.mode = "no-cors";
+      return originalFetch.call(this, input, init);
+    }
   };
 
   const originalXHROpen = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function (method, url, ...args) {
     url = replaceHost(url);
-    return originalXHROpen.call(this, method, url, ...args);
+
+    try {
+      const xhr = originalXHROpen.call(this, method, url, ...args);
+
+      // Set CORS properties
+      this.withCredentials = true;
+      this.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+
+      // Add error handler for CORS failures
+      this.addEventListener("error", () => {
+        // Create new XHR with no-cors
+        const noCorsXhr = new XMLHttpRequest();
+        originalXHROpen.call(noCorsXhr, method, url, ...args);
+        noCorsXhr.withCredentials = false; // Disable credentials for no-cors
+
+        // Copy over event listeners
+        for (const prop in this) {
+          if (prop.startsWith("on")) {
+            noCorsXhr[prop] = this[prop];
+          }
+        }
+
+        // Send the request
+        noCorsXhr.send(this._sendData);
+      });
+
+      // Store send data for potential retry
+      const originalSend = this.send;
+      this.send = function (data) {
+        this._sendData = data;
+        return originalSend.call(this, data);
+      };
+
+      return xhr;
+    } catch (e) {
+      console.debug("Retrying XHR with no-cors:", e);
+      const noCorsXhr = originalXHROpen.call(this, method, url, ...args);
+      this.withCredentials = false;
+      return noCorsXhr;
+    }
   };
 
   // Handle WebSocket connections since kagi uses them

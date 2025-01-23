@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"io/fs"
@@ -13,16 +14,18 @@ import (
 
 var (
 	funcsMap = map[string]any{
-		"json": func(v any) string {
-			out, _ := json.Marshal(v)
-			return string(out)
+		"json": func(v any) htmlTemplate.JS {
+			out, err := json.Marshal(v)
+			if err != nil {
+				return htmlTemplate.JS("null")
+			}
+			return htmlTemplate.JS(bytes.ReplaceAll(out, []byte{'\\'}, []byte(`\x5c`)))
 		},
 		"codeString": func(code int) string {
 			txt := http.StatusText(code)
 			if len(txt) > 0 {
 				return txt
 			}
-
 			return "Unknown Status Code"
 		},
 	}

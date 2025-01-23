@@ -11,6 +11,8 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	expiremap "github.com/nursik/go-expire-map"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 	"github.com/sarumaj/kagi-proxy/pkg/common"
@@ -18,6 +20,20 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// SessionMap is a map that stores the user session.
+// It uses the session ID as the key and the session information as the value.
+var SessionMap = expiremap.New()
+
+// SessionInfo is a struct that stores the user session information.
+type SessionInfo struct {
+	// SessionId is the session ID.
+	SessionId string
+	// CreatedAt is the session creation time.
+	CreatedAt time.Time
+	// Rules are volatile rules that are evaluated at runtime for given session.
+	Rules common.Ruleset
+}
 
 // BasicAuth is a middleware that checks if the user is authenticated.
 // It skips authentication for the paths in exceptPaths.
@@ -47,6 +63,9 @@ func BasicAuth(exceptPaths []string) gin.HandlerFunc {
 
 				// Establish or overwrite the user session
 				session.Set("user", common.ConfigProxyUser())
+				sessionId, _ := uuid.NewRandom()
+				session.Set("session_id", sessionId.String())
+				session.Set("created_at", time.Now().Unix())
 				if !sessionSave(session, ctx) {
 					return
 				}
@@ -277,6 +296,9 @@ func HandleLogin() gin.HandlerFunc {
 		// Success: Redirect the user to the root page or the location he attempted to access before page
 		if validUsername && validPassword && validOTP {
 			session.Set("user", request.Username)
+			sessionId, _ := uuid.NewRandom()
+			session.Set("session_id", sessionId.String())
+			session.Set("created_at", time.Now().Unix())
 			redirectURL := session.Get("redirect_url")
 			session.Delete("redirect_url")
 			if !sessionSave(session, ctx) {
@@ -320,9 +342,18 @@ func HandleLogout() gin.HandlerFunc {
 	}
 }
 
-// HandleUnauthorized is a handler that displays an unauthorized page.
-func HandleUnauthorized() gin.HandlerFunc {
+// ProxyGuard is a middleware that checks if the request is allowed.
+// It uses the proxy guard rules to evaluate the request.
+func ProxyGuard() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		session := sessions.Default(ctx)
+		sessionId := common.QuickGet[string](session, "session_id")
+		sessionInfo := common.QuickGet[SessionInfo](SessionMap, sessionId)
+		if append(common.ConfigProxyGuardRules(), sessionInfo.Rules...).Evaluate(ctx.Request) == common.Allow {
+			ctx.Next()
+			return
+		}
+
 		nonce, _ := common.GetNonce()
 		SetContentSecurityHeaders(ctx.Writer, nonce)
 		ctx.HTML(http.StatusForbidden, "error.html", gin.H{
@@ -331,6 +362,7 @@ func HandleUnauthorized() gin.HandlerFunc {
 			"error": nil,
 			"nonce": nonce,
 		})
+		ctx.Abort()
 	}
 }
 
