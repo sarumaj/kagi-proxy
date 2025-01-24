@@ -61,6 +61,7 @@
     "signup",
     "sslmode",
     "Stringp",
+    "superdomains",
     "Titov",
     "totp",
     "trimpath",

@@ -1,0 +1,77 @@
+{
+  "allow": [
+    {
+      "schema": "https",
+      "domain": "kagi.com",
+      "path": "/favicon.ico",
+      "path_type": "exact"
+    },
+    {
+      "schema": "https",
+      "domain": "*.kagi.com",
+      "path": "/favicon.ico",
+      "path_type": "exact"
+    },
+    {
+      "schema": "https",
+      "domain": "status.*",
+      "path": "/summary.json",
+      "path_type": "exact"
+    }
+  ],
+  "deny": [
+    {
+      "schema": "https",
+      "domain": "kagi.com",
+      "path": "/settings",
+      "path_type": "exact",
+      "query": {
+        "p": [
+          "billing"
+        ]
+      }
+    },
+    {
+      "schema": "https",
+      "domain": "kagi.com",
+      "path": "/settings",
+      "path_type": "exact",
+      "query": {
+        "p": [
+          "gift"
+        ]
+      }
+    },
+    {
+      "schema": "https",
+      "domain": "kagi.com",
+      "path": "/settings",
+      "path_type": "exact",
+      "query": {
+        "p": [
+          "user_details"
+        ]
+      }
+    },
+    {
+      "schema": "https",
+      "domain": "kagi.com",
+      "path": "/settings",
+      "path_type": "exact",
+      "query": {
+        "generate": [
+          "1"
+        ],
+        "p": [
+          "api"
+        ]
+      }
+    },
+    {
+      "schema": "https",
+      "domain": "kagi.com",
+      "path": "/api/user_token",
+      "path_type": "prefix"
+    }
+  ]
+}

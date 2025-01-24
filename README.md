@@ -29,6 +29,8 @@ Usage of kagi-proxy:
         requests per second for rate limiting (default 90)
   -port uint
         port to listen on (default 8080)
+  -proxy-extra-policy string
+        path to a JSON file with additional policy rules
   -proxy-host string
         proxy domain (default "kagi.com")
   -proxy-otp-secret string

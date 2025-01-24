@@ -1,9 +1,30 @@
 /* error.css */
+/* Variables */
+:root {
+  --background-color: #ffffff;
+  --error-color: #dc3545;
+  --container-background: #f8f9fa;
+  --primary-color: #1a73e8;
+  --secondary-color: #004299;
+  --text-color: #333333;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background-color: #1a1a1a;
+    --error-color: #ff6b6b;
+    --container-background: #2d2d2d;
+    --primary-color: #60a5fa;
+    --secondary-color: #186edf;
+    --text-color: #e0e0e0;
+  }
+}
+
 /* Element Selectors */
 body {
   align-items: center;
-  background: #f5f5f5;
-  color: #333;
+  background-color: var(--background-color);
+  color: var(--text-color);
   display: flex;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
@@ -15,7 +36,7 @@ body {
 }
 
 h1 {
-  color: #e74c3c;
+  color: var(--error-color);
   font-size: 24px;
   margin: 0 0 20px;
 }
@@ -27,7 +48,7 @@ p {
 
 /* Class Selectors */
 .container {
-  background: white;
+  background: var(--container-background);
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   max-width: 600px;
@@ -36,16 +57,16 @@ p {
 }
 
 .error-code {
-  color: #666;
+  color: var(--error-color);
   font-family: monospace;
   font-size: 14px;
   margin-top: 20px;
 }
 
 .error-details {
-  background: #f8f9fa;
+  background: var(--background-color);
   border-radius: 4px;
-  color: #666;
+  color: var(--text-color);
   font-family: monospace;
   font-size: 14px;
   margin: 20px 0;
@@ -55,7 +76,7 @@ p {
 }
 
 .retry-button {
-  background: #3498db;
+  background: var(--primary-color);
   border-radius: 4px;
   color: white;
   display: inline-block;
@@ -69,7 +90,7 @@ p {
 }
 
 .retry-button:hover {
-  background: #2980b9;
+  background: var(--secondary-color);
 }
 
 /* Media Queries */

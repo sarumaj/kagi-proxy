@@ -16,8 +16,11 @@ const (
 )
 
 const (
-	Exact pathType = iota
+	// Exact matches the path exactly.
+	Exact pathType = iota + 1
+	// Prefix matches the path as a prefix.
 	Prefix
+	// Regex matches the path as an arbitrary regex.
 	Regex
 )
 
@@ -31,16 +34,79 @@ type (
 		Removed Ruleset
 	}
 
+	// Rule is an access control rule.
 	Rule struct {
-		Schema   string
-		Domain   string
-		Path     string
-		PathType pathType
-		Query    url.Values
+		// Schema is the URL schema.
+		Schema string `json:"schema,omitempty"`
+		// Domain is the URL domain.
+		// May contain asterisks at the beginning or ending of the domain to match subdomains or superdomains.
+		Domain string `json:"domain,omitempty"`
+		// Path is the URL path.
+		Path string `json:"path"`
+		// PathType is the type of the path. It can be exact, prefix, or regex.
+		PathType pathType `json:"path_type"`
+		// Query is the URL query parameters.
+		Query url.Values `json:"query,omitempty"`
 	}
 
+	// Ruleset is a set of rules.
 	Ruleset []Rule
+
+	// Policy is the access control policy.
+	// If effect is allow, the request is allowed publicly without proxy authentication.
+	// If effect is deny, the request is explicit denied and not accessible via the proxy.
+	Policy map[effect]Ruleset
 )
+
+// MarshalText implements the encoding.TextMarshaler interface.
+func (e effect) MarshalText() (text []byte, err error) {
+	if e {
+		return []byte("allow"), nil
+	}
+	return []byte("deny"), nil
+}
+
+// UnmarshalText implements the encoding.TextUnmarshaler interface.
+func (e *effect) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "allow":
+		*e = Allow
+	case "deny":
+		*e = Deny
+	default:
+		return fmt.Errorf("invalid effect: %s", text)
+	}
+	return nil
+}
+
+// MarshalText implements the encoding.TextMarshaler interface.
+func (p pathType) MarshalText() (text []byte, err error) {
+	switch p {
+	case Exact:
+		return []byte("exact"), nil
+	case Prefix:
+		return []byte("prefix"), nil
+	case Regex:
+		return []byte("regex"), nil
+	default:
+		return nil, fmt.Errorf("invalid path type: %d", p)
+	}
+}
+
+// UnmarshalText implements the encoding.TextUnmarshaler interface.
+func (p *pathType) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "exact":
+		*p = Exact
+	case "prefix":
+		*p = Prefix
+	case "regex":
+		*p = Regex
+	default:
+		return fmt.Errorf("invalid path type: %s", text)
+	}
+	return nil
+}
 
 // Regex returns the regex representation of the rule.
 // The regex is used to match the request path and query.
@@ -206,6 +272,17 @@ func (rules Ruleset) Evaluate(req *http.Request, noMatchEffect effect) effect {
 
 // Len returns the number of rules in the ruleset.
 func (rules Ruleset) Len() int { return len(rules) }
+
+// Merge returns a new ruleset that contains all rules from both rulesets.
+func (rules Ruleset) Merge(other Ruleset) Ruleset {
+	for _, rule := range other {
+		if !rules.Contains(rule) {
+			rules = append(rules, rule)
+		}
+	}
+
+	return rules
+}
 
 // RegexList returns a list of regex strings for each rule.
 func (rules Ruleset) RegexList() []string {

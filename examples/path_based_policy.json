@@ -1,0 +1,53 @@
+{
+  "allow": [
+    {
+      "path": "/favicon.ico",
+      "path_type": "exact"
+    }
+  ],
+  "deny": [
+    {
+      "path": "/settings",
+      "path_type": "exact",
+      "query": {
+        "p": [
+          "billing"
+        ]
+      }
+    },
+    {
+      "path": "/settings",
+      "path_type": "exact",
+      "query": {
+        "p": [
+          "gift"
+        ]
+      }
+    },
+    {
+      "path": "/settings",
+      "path_type": "exact",
+      "query": {
+        "p": [
+          "user_details"
+        ]
+      }
+    },
+    {
+      "path": "/settings",
+      "path_type": "exact",
+      "query": {
+        "generate": [
+          "1"
+        ],
+        "p": [
+          "api"
+        ]
+      }
+    },
+    {
+      "path": "/api/user_token",
+      "path_type": "prefix"
+    }
+  ]
+}

@@ -14,13 +14,13 @@ import (
 )
 
 // BasicAuth is a middleware that checks if the user is authenticated.
-// It skips authentication for the paths in exceptPaths.
+// It skips authentication for the paths in ConfigProxyGuardPolicy().WhiteList.
 // It seeks the proxy_token query parameter to authenticate the user.
 // Otherwise, it seeks the user session.
 // If the user is not authenticated, it redirects to the login page.
-func BasicAuth(exceptPaths common.Ruleset) gin.HandlerFunc {
+func BasicAuth() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		if exceptPaths.Evaluate(ctx.Request, common.Deny) {
+		if common.ConfigProxyGuardPolicy()[common.Allow].Evaluate(ctx.Request, common.Deny) {
 			common.Logger().Debug("Skipping basic auth for path", zap.String("path", ctx.Request.URL.Path))
 			ctx.Next()
 			return
@@ -71,5 +71,27 @@ func BasicAuth(exceptPaths common.Ruleset) gin.HandlerFunc {
 
 		common.Logger().Debug("User authenticated with session")
 		ctx.Next()
+	}
+}
+
+// ProxyGuard is a middleware that checks if the request is allowed.
+// It evaluates ABAC rules to authorize the request.
+// It uses the ConfigProxyGuardPolicy().BlackList for evaluation.
+func ProxyGuard() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		if common.ConfigProxyGuardPolicy()[common.Deny].Evaluate(ctx.Request, common.Allow) {
+			ctx.Next()
+			return
+		}
+
+		nonce, _ := common.GetNonce()
+		web.SetContentSecurityHeaders(ctx.Writer, nonce)
+		ctx.HTML(http.StatusForbidden, "error.html", gin.H{
+			"code":  http.StatusForbidden,
+			"csp":   ctx.Writer.Header().Get("Content-Security-Policy"),
+			"error": nil,
+			"nonce": nonce,
+		})
+		ctx.Abort()
 	}
 }

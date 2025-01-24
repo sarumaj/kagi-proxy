@@ -1,6 +1,8 @@
+//go:generate go run generate/examples.go
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -20,15 +22,16 @@ import (
 )
 
 var (
-	limitRPS           = flag.Float64("limit-rps", 90, "requests per second for rate limiting")
 	limitBurst         = flag.Uint("limit-burst", 12, "burst size for rate limiting")
+	limitRPS           = flag.Float64("limit-rps", 90, "requests per second for rate limiting")
 	port               = flag.Uint("port", common.Getenv[uint]("PORT", 8080), "port to listen on")
-	sessionToken       = flag.String("session-token", common.Getenv[string]("KAGI_SESSION_TOKEN", ""), "session token for the Kagi website")
-	proxySessionSecret = flag.String("proxy-session-secret", common.Getenv[string]("PROXY_SESSION_SECRET", "test"), "cookie encryption secret for the proxy session")
-	proxyOTPSecret     = flag.String("proxy-otp-secret", common.Getenv[string]("PROXY_OTP_SECRET", "test"), "OTP encryption secret for the proxy session")
-	proxyUser          = flag.String("proxy-user", common.Getenv[string]("PROXY_USER", "user"), "proxy user")
-	proxyPass          = flag.String("proxy-pass", common.Getenv[string]("PROXY_PASS", "pass"), "proxy user password")
-	proxyHost          = flag.String("proxy-host", common.Getenv[string]("PROXY_HOST", "kagi.com"), "proxy domain")
+	proxyExtraPolicy   = flag.String("proxy-extra-policy", "", "path to a JSON file with additional policy rules")
+	proxyHost          = flag.String("proxy-host", common.Getenv("PROXY_HOST", "kagi.com"), "proxy domain")
+	proxyOTPSecret     = flag.String("proxy-otp-secret", common.Getenv("PROXY_OTP_SECRET", "test"), "OTP encryption secret for the proxy session")
+	proxyPass          = flag.String("proxy-pass", common.Getenv("PROXY_PASS", "pass"), "proxy user password")
+	proxySessionSecret = flag.String("proxy-session-secret", common.Getenv("PROXY_SESSION_SECRET", "test"), "cookie encryption secret for the proxy session")
+	proxyUser          = flag.String("proxy-user", common.Getenv("PROXY_USER", "user"), "proxy user")
+	sessionToken       = flag.String("session-token", common.Getenv("KAGI_SESSION_TOKEN", ""), "session token for the Kagi website")
 )
 
 func main() {
@@ -50,15 +53,37 @@ func main() {
 		zap.Stringp("proxyHost", proxyHost),
 	)
 
+	var extraPolicy common.Policy
+	if len(*proxyExtraPolicy) > 0 {
+		fileDescriptor, err := os.Open(*proxyExtraPolicy)
+		if err != nil {
+			common.Logger().Fatal("Failed to open extra policy file", zap.Error(err))
+		}
+
+		decoder := json.NewDecoder(fileDescriptor)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&extraPolicy); err != nil {
+			common.Logger().Fatal("Failed to decode extra policy file", zap.Error(err))
+		}
+
+		common.Logger().Debug("Extra policy", zap.Reflect("extraPolicy", extraPolicy), zap.String("file", *proxyExtraPolicy))
+	}
+
 	common.ConfigureProxy(
 		// Define ABAC rules. The rules are used to determine if a request is allowed.
-		// Explicit denial is the default behavior. Otherwise, the request is allowed.
-		common.WithProxyGuardRules(common.Ruleset{
-			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"billing"}}},
-			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"gift"}}},
-			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"user_details"}}},
-			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"api"}, "generate": {"1"}}},
-			common.Rule{Path: "/api/user_token", PathType: common.Prefix},
+		// Denial rules are explicit and make endpoints inaccessible through the proxy.
+		// Allow rules are public and do not require authentication.
+		common.WithProxyGuardPolicy(common.Policy{
+			common.Deny: common.Ruleset{
+				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"billing"}}},
+				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"gift"}}},
+				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"user_details"}}},
+				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"api"}, "generate": {"1"}}},
+				common.Rule{Path: "/api/user_token", PathType: common.Prefix},
+			}.Merge(extraPolicy[common.Deny]),
+			common.Allow: common.Ruleset{
+				common.Rule{Path: "/favicon.ico", PathType: common.Exact},
+			}.Merge(extraPolicy[common.Allow]),
 		}),
 		common.WithProxyPass(*proxyPass),                   // Set the proxy password.
 		common.WithProxyRedirectLoginURL("/signin"),        // Redirect to the login page if the user is not authenticated.
@@ -121,15 +146,13 @@ func main() {
 	router.GET("/logout", endpoints.SignOut)
 
 	// Handle summary.json requests.
-	// Status.kagi.com returns a valid response but the status is always "404".
+	// Status.kagi.com returns for some requests a valid response but the status is always "404".
 	// This is a workaround to return a valid response.
-	router.GET("/summary.json", endpoints.CheckSummary)
+	router.GET("/summary.json", endpoints.CheckStatus)
+	router.GET("/api/summary.json", endpoints.CheckStatus)
 
 	// Add a proxy route for anything else, do not require authentication for the favicon.
-	router.NoRoute(middlewares.BasicAuth(common.Ruleset{
-		// Do not require authentication for the favicon.
-		common.Rule{Path: "/favicon.ico", PathType: common.Exact},
-	}), endpoints.Proxy())
+	router.NoRoute(middlewares.BasicAuth(), middlewares.ProxyGuard(), endpoints.Proxy())
 
 	// Install handler on the server
 	server.Handler = router

@@ -17,7 +17,7 @@ var (
 
 type (
 	cfg struct {
-		ProxyGuardRules       Ruleset
+		ProxyGuardPolicy      Policy
 		ProxyPass             string
 		ProxyOTPSecret        string
 		ProxyRedirectLoginURL string
@@ -76,11 +76,11 @@ func (t hosts) Reverse() hosts {
 	return reversed
 }
 
-// ConfigProxyGuardRules returns the proxy guard rules.
-func ConfigProxyGuardRules() Ruleset {
+// ConfigProxyGuardPolicy returns the proxy guard rules.
+func ConfigProxyGuardPolicy() Policy {
 	configMux.Lock()
 	defer configMux.Unlock()
-	return config.ProxyGuardRules
+	return config.ProxyGuardPolicy
 }
 
 // ConfigProxyPass returns the proxy password.
@@ -139,11 +139,11 @@ func ConfigureProxy(opts ...option) {
 	}
 }
 
-// WithProxyGuardRules sets the proxy guard rules.
-func WithProxyGuardRules(rules Ruleset) option {
+// WithProxyGuardPolicy sets the proxy guard rules.
+func WithProxyGuardPolicy(policy Policy) option {
 	return func(pc *cfg) {
 		configMux.Lock()
-		pc.ProxyGuardRules = rules
+		pc.ProxyGuardPolicy = policy
 		configMux.Unlock()
 	}
 }

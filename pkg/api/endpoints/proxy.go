@@ -154,7 +154,7 @@ func (p ProxyState) ModifyResponse(resp *http.Response) error {
 	// Generate the proxy script
 	var script bytes.Buffer
 	if err := templates.TextTemplates().ExecuteTemplate(&script, "proxy.js", map[string]any{
-		"forbidden_paths": common.ConfigProxyGuardRules().RegexList(),
+		"forbidden_paths": common.ConfigProxyGuardPolicy()[common.Deny].RegexList(),
 		"host_map":        common.ConfigProxyTargetHosts().Reverse(),
 		"proxy_token":     common.B64URLNoPadding.EncodeToString(hash),
 		"retry_config":    p.RetryConfig,

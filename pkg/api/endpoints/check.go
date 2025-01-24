@@ -5,6 +5,7 @@ import (
 	"html"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sarumaj/kagi-proxy/pkg/common"
@@ -15,11 +16,11 @@ import (
 // It returns a 200 OK status code.
 func CheckHealth(ctx *gin.Context) { ctx.Status(http.StatusOK) }
 
-// CheckSummary is a workaround to return a valid response for status.kagi.com.
-// Status.kagi.com returns a valid response but the status is always "404".
+// CheckStatus is a workaround to return a valid response for status.kagi.com.
+// Status.kagi.com returns for some requests a valid response but the status is always "404".
 // This is a workaround to return a valid response.
-func CheckSummary(ctx *gin.Context) {
-	resp, err := http.Get("https://status.kagi.com/summary.json")
+func CheckStatus(ctx *gin.Context) {
+	resp, err := http.Get("https://status.kagi.com/" + strings.TrimPrefix(ctx.Request.URL.Path, "/"))
 	if err != nil {
 		nonce, _ := common.GetNonce()
 		web.SetContentSecurityHeaders(ctx.Writer, nonce)
