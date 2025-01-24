@@ -1,13 +1,15 @@
 # kagi-proxy
 
-Proxy service for [kagi.com](https://kagi.com). [kagi.com](https://kagi.com) offers a **search engine** as payware which is less vigilantly subjected to questionable SEO practices. Furthermore, it offers **AI assistant** service. The **AI assistant** ships most recent available GPT solutions under one subscription, e.g.:
+Proxy service for [© kagi.com](https://kagi.com). © Kagi offers a **search engine** as payware which is less vigilantly subjected to questionable SEO practices. Furthermore, it offers **AI assistant** service. The **AI assistant** ships most recent available GPT solutions under one subscription, e.g.:
 
 - Anthropic: _Claude 3.5 Sonnet_
 - OpenAI: _GPT 4o_
 - Google: _Gemini Pro_
 - Meta: _Llama 3_
 
-The subscription is around 25$ each month for both the unlimited search engine and AI assistant services. Family plan is provided as well, whereas the fee rounds up to 20$ base rate + 15$ for each member per month. I wrote a simple proxy service to make my personal [kagi.com](https://kagi.com) subscription shareable with my family only. I provide a reversed proxy behind TLS, basic authentication scheme, CSRF and DDoS protection by employing request throttling. I interfere with the kagi.com interface via DOM content mutation observation and JS injection to provide a seamless user experience.
+Refer to [help.kagi.com](https://help.kagi.com) for more information.
+
+The subscription is around 25$ each month for both the unlimited search engine and AI assistant services. Family plan is provided as well, whereas the fee rounds up to 20$ base rate + 15$ for each member per month. More about pricing their official site: [kagi.com/pricing](https://kagi.com/pricing). I wrote a simple proxy service to make my personal © Kagi subscription shareable with my family only. I provide a reversed proxy behind TLS, basic authentication scheme, CSRF and DDoS protection by employing request throttling. I interfere with the kagi.com interface via DOM content mutation observation and JS injection to provide a seamless user experience.
 
 Proxy is exposed behind [kagi.sarumaj.com](https://kagi.sarumaj.com):
 

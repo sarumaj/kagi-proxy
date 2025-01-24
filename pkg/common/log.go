@@ -7,7 +7,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var logger *zap.Logger
+var (
+	logger *zap.Logger
+)
 
 func init() {
 	logger = Logger()
@@ -20,7 +22,13 @@ func Logger() *zap.Logger {
 		return logger
 	}
 
-	cfg := zap.NewDevelopmentEncoderConfig()
+	var cfg zapcore.EncoderConfig
+	if Getenv("PROXY_DEBUG", true) {
+		cfg = zap.NewDevelopmentEncoderConfig()
+	} else {
+		cfg = zap.NewProductionEncoderConfig()
+	}
+
 	cfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	enc := zapcore.NewConsoleEncoder(cfg)
 	logger = zap.New(zapcore.NewTee(

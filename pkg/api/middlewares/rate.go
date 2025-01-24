@@ -1,13 +1,12 @@
-package api
+package middlewares
 
 import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sarumaj/kagi-proxy/pkg/common"
 	"go.uber.org/zap"
 	"golang.org/x/time/rate"
-
-	"github.com/sarumaj/kagi-proxy/pkg/common"
 )
 
 // Rate is a middleware that limits the request rate.

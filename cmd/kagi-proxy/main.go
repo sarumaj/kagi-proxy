@@ -3,29 +3,23 @@ package main
 import (
 	"flag"
 	"fmt"
-	"html"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"slices"
-	"strings"
-	"time"
 
-	"github.com/gin-contrib/cors"
-	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
-	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
-	"github.com/sarumaj/kagi-proxy/pkg/api"
+	"github.com/sarumaj/kagi-proxy/pkg/api/endpoints"
+	"github.com/sarumaj/kagi-proxy/pkg/api/middlewares"
+	"github.com/sarumaj/kagi-proxy/pkg/api/templates"
 	"github.com/sarumaj/kagi-proxy/pkg/common"
 )
 
 var (
-	environ []string
-
 	limitRPS           = flag.Float64("limit-rps", 90, "requests per second for rate limiting")
 	limitBurst         = flag.Uint("limit-burst", 12, "burst size for rate limiting")
 	port               = flag.Uint("port", common.Getenv[uint]("PORT", 8080), "port to listen on")
@@ -57,17 +51,8 @@ func main() {
 	)
 
 	common.ConfigureProxy(
-		common.WithCsrfSecret(*proxySessionSecret),
-		common.WithSessionToken(*sessionToken),
-		common.WithProxyUser(*proxyUser),
-		common.WithProxyPass(*proxyPass),
-		common.WithProxyOTPSecret(*proxyOTPSecret),
-		common.WithProxyTargetHosts(map[string]string{
-			*proxyHost:                "kagi.com",
-			"translate." + *proxyHost: "translate.kagi.com",
-			"assets." + *proxyHost:    "assets.kagi.com",
-			"status." + *proxyHost:    "status.kagi.com",
-		}),
+		// Define ABAC rules. The rules are used to determine if a request is allowed.
+		// Explicit denial is the default behavior. Otherwise, the request is allowed.
 		common.WithProxyGuardRules(common.Ruleset{
 			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"billing"}}},
 			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"gift"}}},
@@ -75,116 +60,82 @@ func main() {
 			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"api"}, "generate": {"1"}}},
 			common.Rule{Path: "/api/user_token", PathType: common.Prefix},
 		}),
-		common.WithProxyRedirectLoginURL("/signin"),
+		common.WithProxyPass(*proxyPass),                   // Set the proxy password.
+		common.WithProxyRedirectLoginURL("/signin"),        // Redirect to the login page if the user is not authenticated.
+		common.WithProxySessionSecret(*proxySessionSecret), // Set the session secret for the proxy session cookie.
+		common.WithProxyOTPSecret(*proxyOTPSecret),         // Set the OTP secret for the second factor authentication.
+		// Define the target hosts for the proxy. The key is the proxy host and the value is the target host.
+		// The target host is used to create the request URL and forward the request.
+		common.WithProxyTargetHosts(map[string]string{
+			*proxyHost:                "kagi.com",
+			"translate." + *proxyHost: "translate.kagi.com",
+			"assets." + *proxyHost:    "assets.kagi.com",
+			"status." + *proxyHost:    "status.kagi.com",
+		}),
+		common.WithProxyUser(*proxyUser),       // Set the proxy user.
+		common.WithSessionToken(*sessionToken), // Set the session token for the Kagi website, will be delivered as a cookie.
 	)
 
-	environ = os.Environ()
+	environ := os.Environ()
 	slices.Sort(environ)
 	common.Logger().Debug("Environment variables", zap.Strings("environ", environ))
 
+	// Create a new server.
+	server := &http.Server{
+		Addr:     fmt.Sprintf(":%d", *port),
+		ErrorLog: log.New(io.Discard, "", 0), // Disable the default logger.
+	}
+
 	router := gin.New(func(e *gin.Engine) {
+		// Set the HTML templates.
+		e.SetHTMLTemplate(templates.HTMLTemplates())
+
+		// Recover from panics.
+		e.Use(middlewares.Recover())
+
+		// Log all requests.
+		e.Use(middlewares.Logger())
+
 		// Create a new cookie store.
-		hashKey, blockKey := common.MakeKeyPair([]byte(*proxySessionSecret))
-		store := cookie.NewStore(hashKey, blockKey)
-		store.Options(sessions.Options{
-			Domain: *proxyHost, // Required to support wildcard subdomains
-			Path:   "/",
-			// 0: session cookie until the browser is closed, -1: delete the cookie, math.MaxInt32: 68 years
-			MaxAge:   int((24 * 7 * time.Hour).Seconds()),
-			Secure:   true,
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		})
-		e.Use(sessions.Sessions("proxy_session", store))
+		e.Use(middlewares.Session())
 
 		// Setup CORS
-		config := cors.Config{}
-		config.AllowCredentials = true
-		config.AllowBrowserExtensions = true
-		config.AddAllowHeaders("X-Requested-With", "Content-Type", "Authorization", "Origin", "Accept")
-		config.AllowOriginFunc = func(origin string) bool {
-			parsed, err := url.Parse(origin)
-			if err != nil {
-				return false
-			}
-
-			if parsed.Hostname() == "localhost" {
-				return true
-			}
-
-			hostname := parsed.Hostname()
-			for targetDomain, proxyDomain := range common.ConfigProxyTargetHosts() {
-				switch {
-				case hostname == targetDomain,
-					hostname == proxyDomain,
-					strings.HasSuffix(hostname, "."+targetDomain),
-					strings.HasSuffix(hostname, "."+proxyDomain):
-
-					return true
-				}
-			}
-
-			return false
-		}
-		config.AddExposeHeaders("Location", "Content-Disposition")
-		config.AllowMethods = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions}
-		if err := config.Validate(); err != nil {
-			common.Logger().Fatal("Invalid CORS configuration", zap.Error(err))
-		}
-		e.Use(cors.New(config))
-
-		// Use the ginzap middleware to log requests.
-		e.Use(ginzap.GinzapWithConfig(common.Logger(), &ginzap.Config{
-			TimeFormat:   time.RFC3339,
-			UTC:          true,
-			DefaultLevel: zapcore.DebugLevel,
-			Context:      func(ctx *gin.Context) []zapcore.Field { return []zapcore.Field{zap.Any("headers", ctx.Request.Header)} },
-		}))
-
-		// Use the ginzap middleware to log panics.
-		e.Use(ginzap.CustomRecoveryWithZap(common.Logger(), true, func(c *gin.Context, err any) {
-			nonce, _ := common.GetNonce()
-			api.SetContentSecurityHeaders(c.Writer, nonce)
-			c.HTML(http.StatusInternalServerError, "error.html", gin.H{
-				"error": html.EscapeString(fmt.Errorf("%v", err).Error()),
-				"code":  http.StatusInternalServerError,
-				"nonce": nonce,
-			})
-		}))
-
-		// Set the HTML templates.
-		e.SetHTMLTemplate(api.HTMLTemplates())
+		e.Use(middlewares.CORS())
 
 		// Use the rate limiting middleware.
-		e.Use(api.Rate(*limitRPS, int(*limitBurst)))
+		e.Use(middlewares.Rate(*limitRPS, int(*limitBurst)))
 	})
 
-	// Add a health check route.
-	router.Match([]string{http.MethodHead, http.MethodGet}, "/health", func(ctx *gin.Context) { ctx.Status(http.StatusOK) })
+	// Add a health check route. It is used for deployment monitoring.
+	router.Match([]string{http.MethodHead, http.MethodGet}, "/health", endpoints.CheckHealth)
 
 	// Add a redirect login route.
-	if login := router.Group("/signin", api.CSRF()); true {
-		login.GET("/", api.ShowLogin())
-		login.POST("/", api.HandleLogin())
+	// It overwrites the default login route of kagi.com.
+	if login := router.Group("/signin", middlewares.CSRF()); true {
+		login.GET("/", endpoints.SignInWeb)
+		login.POST("/", endpoints.SignInForm)
 	}
 
 	// Overwrite the logout route.
-	router.GET("/logout", api.HandleLogout())
+	// Without it, a user could terminate the kagi.com session.
+	router.GET("/logout", endpoints.SignOut)
+
+	// Handle summary.json requests.
+	// Status.kagi.com returns a valid response but the status is always "404".
+	// This is a workaround to return a valid response.
+	router.GET("/summary.json", endpoints.CheckSummary)
 
 	// Add a proxy route for anything else, do not require authentication for the favicon.
-	router.NoRoute(api.BasicAuth([]string{"/favicon.ico"}), api.ProxyGuard(), api.ProxyPass())
+	router.NoRoute(middlewares.BasicAuth(common.Ruleset{
+		// Do not require authentication for the favicon.
+		common.Rule{Path: "/favicon.ico", PathType: common.Exact},
+	}), endpoints.Proxy())
 
-	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", *port),
-		Handler: router,
-	}
-	server.RegisterOnShutdown(func() {
-		common.Logger().Info("Server shutdown")
-		api.SessionMap.Close()
-	})
+	// Install handler on the server
+	server.Handler = router
 
-	// Start the server.
+	// Serve the content.
 	if err := server.ListenAndServe(); err != nil {
-		common.Logger().Fatal("Unexpected server error", zap.Error(err))
+		common.Logger().Fatal("Server error", zap.Error(err))
 	}
 }

@@ -1,10 +1,9 @@
-package api
+package templates
 
 import (
 	"bytes"
 	"embed"
 	"encoding/json"
-	"io/fs"
 	"net/http"
 	"sync"
 
@@ -30,7 +29,7 @@ var (
 		},
 	}
 
-	//go:embed templates/*.html templates/*.js templates/*.css
+	//go:embed *.html *.js *.css
 	templatesFS embed.FS
 
 	syncMap sync.Map
@@ -43,8 +42,7 @@ func HTMLTemplates() *htmlTemplate.Template {
 		return v.(*htmlTemplate.Template)
 	}
 
-	subFS, _ := fs.Sub(templatesFS, "templates")
-	tpl := htmlTemplate.Must(htmlTemplate.New("").Funcs(funcsMap).ParseFS(subFS, "*.html", "login.js", "*.css"))
+	tpl := htmlTemplate.Must(htmlTemplate.New("").Funcs(funcsMap).ParseFS(templatesFS, "*.html", "login.js", "*.css"))
 	syncMap.Store("html", tpl)
 	return tpl
 }
@@ -56,8 +54,7 @@ func TextTemplates() *textTemplate.Template {
 		return v.(*textTemplate.Template)
 	}
 
-	subFS, _ := fs.Sub(templatesFS, "templates")
-	tpl := textTemplate.Must(textTemplate.New("").Funcs(funcsMap).ParseFS(subFS, "proxy.js"))
+	tpl := textTemplate.Must(textTemplate.New("").Funcs(funcsMap).ParseFS(templatesFS, "proxy.js"))
 	syncMap.Store("text", tpl)
 	return tpl
 }

@@ -16,6 +16,7 @@ func (c closer) Close() error {
 
 	case interface{ Close() }:
 		w.Close()
+
 	}
 
 	return nil

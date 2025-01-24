@@ -26,7 +26,14 @@ type (
 
 	pathType int
 
+	diff struct {
+		Added   Ruleset
+		Removed Ruleset
+	}
+
 	Rule struct {
+		Schema   string
+		Domain   string
 		Path     string
 		PathType pathType
 		Query    url.Values
@@ -40,6 +47,27 @@ type (
 func (r Rule) Regex() string {
 	var builder strings.Builder
 	_, _ = builder.WriteString("^") // Start the regex
+
+	if len(r.Schema) > 0 {
+		_, _ = builder.WriteString(regexp.QuoteMeta(r.Schema))
+		_, _ = builder.WriteString("://")
+	} else if len(r.Domain) > 0 {
+		_, _ = builder.WriteString("[^:]+://") // Match anything except the schema
+	}
+
+	if len(r.Domain) > 0 {
+		if strings.HasPrefix(r.Domain, "*") {
+			_, _ = builder.WriteString("[^/]+") // Match anything except the path or subdomain
+			_, _ = builder.WriteString(regexp.QuoteMeta(r.Domain[1:]))
+		} else if strings.HasSuffix(r.Domain, "*") {
+			_, _ = builder.WriteString(regexp.QuoteMeta(r.Domain[:len(r.Domain)-1]))
+			_, _ = builder.WriteString("[^/]+") // Match anything except the path
+		} else {
+			_, _ = builder.WriteString(regexp.QuoteMeta(r.Domain))
+		}
+	} else if len(r.Schema) > 0 {
+		_, _ = builder.WriteString("[^/]+") // Match anything except the path
+	}
 
 	// Convert the path to a regex
 	if r.PathType == Regex {
@@ -82,12 +110,60 @@ func (r Rule) Regex() string {
 	return builder.String()
 }
 
+// Contains returns true if the ruleset contains the rule.
+func (rules Ruleset) Contains(other Rule) bool {
+	for _, rule := range rules {
+		if rule.Schema == other.Schema &&
+			rule.Domain == other.Domain &&
+			rule.Path == other.Path &&
+			rule.PathType == other.PathType &&
+			rule.Query.Encode() == other.Query.Encode() {
+
+			return true
+		}
+	}
+
+	return false
+}
+
+// Compare returns the difference between two rulesets.
+func (rules Ruleset) Compare(other Ruleset) diff {
+	var diff diff
+	for _, rule := range rules {
+		if !other.Contains(rule) {
+			diff.Removed = append(diff.Removed, rule)
+		}
+	}
+
+	for _, rule := range other {
+		if !rules.Contains(rule) {
+			diff.Added = append(diff.Added, rule)
+		}
+	}
+
+	return diff
+}
+
 // Evaluate returns the effect of the first matching rule.
 // If no rule matches, it returns noMatchEffect.
-func (rules Ruleset) Evaluate(req *http.Request) effect {
+func (rules Ruleset) Evaluate(req *http.Request, noMatchEffect effect) effect {
 	reqQuery := req.URL.Query()
 	reqPath := strings.ToLower(req.URL.Path)
 	for _, r := range rules {
+		if len(r.Schema) > 0 && !strings.EqualFold(r.Schema, req.URL.Scheme) {
+			continue
+		}
+
+		if len(r.Domain) > 0 {
+			if strings.HasPrefix(r.Domain, "*") && !strings.HasSuffix(req.URL.Hostname(), r.Domain[1:]) {
+				continue
+			} else if strings.HasSuffix(r.Domain, "*") && !strings.HasPrefix(req.URL.Hostname(), r.Domain[:len(r.Domain)-1]) {
+				continue
+			} else if !strings.EqualFold(r.Domain, req.URL.Hostname()) {
+				continue
+			}
+		}
+
 		switch r.PathType {
 		case Exact:
 			if !strings.EqualFold(reqPath, r.Path) {
@@ -122,11 +198,14 @@ func (rules Ruleset) Evaluate(req *http.Request) effect {
 			}
 		}
 
-		return Deny
+		return !noMatchEffect
 	}
 
-	return Allow
+	return noMatchEffect
 }
+
+// Len returns the number of rules in the ruleset.
+func (rules Ruleset) Len() int { return len(rules) }
 
 // RegexList returns a list of regex strings for each rule.
 func (rules Ruleset) RegexList() []string {

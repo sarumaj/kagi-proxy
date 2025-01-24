@@ -79,6 +79,7 @@ jobs:
           HD_PROXY_USER: ${{ secrets.PROXY_USER }}
           HD_PROXY_PASS: ${{ secrets.PROXY_PASS }}
           HD_PROXY_HOST: ${{ secrets.PROXY_HOST }}
+          HD_PROXY_DEBUG: "false"
 
       - name: Update code documentation
         run: curl -fsSL https://proxy.golang.org/${{ steps.export_module_name.outputs.MODULE_NAME }}/@v/${{ github.ref_name }}.info

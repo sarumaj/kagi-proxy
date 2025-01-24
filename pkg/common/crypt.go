@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/gin-contrib/sessions"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 var (
@@ -134,4 +136,13 @@ func MakeKeyPair(in []byte) ([]byte, []byte) {
 	}
 
 	return key1, key2
+}
+
+func NewUUID() string {
+	uuid, err := uuid.NewRandom()
+	if err != nil {
+		Logger().Error("failed to generate UUID", zap.Error(err))
+	}
+
+	return uuid.String()
 }

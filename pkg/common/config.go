@@ -17,11 +17,11 @@ var (
 
 type (
 	cfg struct {
-		CsrfSecret            string
 		ProxyGuardRules       Ruleset
 		ProxyPass             string
 		ProxyOTPSecret        string
 		ProxyRedirectLoginURL string
+		ProxySessionSecret    string
 		ProxyTargetHosts      hosts
 		ProxyUser             string
 		SessionToken          string
@@ -31,6 +31,18 @@ type (
 
 	hosts map[string]string
 )
+
+// Base returns the base host.
+func (t hosts) Base() (base string) {
+	var shortest string
+	for host := range t {
+		if len(shortest) == 0 || len(host) < len(shortest) {
+			shortest = host
+		}
+	}
+
+	return shortest
+}
 
 // Get returns the target host for given proxy domain.
 // If the target host is not found, it returns the default value.
@@ -55,11 +67,13 @@ func (t hosts) Get(host, def string) string {
 	return "NXDOMAIN"
 }
 
-// ConfigCsrfSecret returns the CSRF secret.
-func ConfigCsrfSecret() string {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.CsrfSecret
+// Reverse returns the reversed hosts mapping.
+func (t hosts) Reverse() hosts {
+	reversed := make(hosts, len(t))
+	for k, v := range t {
+		reversed[v] = k
+	}
+	return reversed
 }
 
 // ConfigProxyGuardRules returns the proxy guard rules.
@@ -90,6 +104,13 @@ func ConfigProxyRedirectLoginURL() string {
 	return config.ProxyRedirectLoginURL
 }
 
+// ConfigProxySessionSecret returns the CSRF secret.
+func ConfigProxySessionSecret() string {
+	configMux.Lock()
+	defer configMux.Unlock()
+	return config.ProxySessionSecret
+}
+
 // ConfigProxyTargetHosts returns the proxy target hosts.
 func ConfigProxyTargetHosts() hosts {
 	configMux.Lock()
@@ -115,15 +136,6 @@ func ConfigSessionToken() string {
 func ConfigureProxy(opts ...option) {
 	for _, opt := range opts {
 		opt(&config)
-	}
-}
-
-// WithCsrfSecret sets the CSRF secret.
-func WithCsrfSecret(secret string) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.CsrfSecret = secret
-		configMux.Unlock()
 	}
 }
 
@@ -159,6 +171,15 @@ func WithProxyRedirectLoginURL(url string) option {
 	return func(pc *cfg) {
 		configMux.Lock()
 		pc.ProxyRedirectLoginURL = url
+		configMux.Unlock()
+	}
+}
+
+// WithProxySessionSecret sets the CSRF secret.
+func WithProxySessionSecret(secret string) option {
+	return func(pc *cfg) {
+		configMux.Lock()
+		pc.ProxySessionSecret = secret
 		configMux.Unlock()
 	}
 }

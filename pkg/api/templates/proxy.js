@@ -1,11 +1,98 @@
 // proxy.js
 (function () {
+  /*
+   * Constants
+   */
+
+  // proxyToken is the token used to authenticate requests to the proxy
   const proxyToken = `{{ .proxy_token }}`;
-  const originalHostMap = JSON.parse(`{{ .host_map | json }}`);
-  const hostMap = Object.fromEntries(
-    Object.entries(originalHostMap).map(([proxy, target]) => [target, proxy])
-  );
+  if (!proxyToken || proxyToken.length === 0) {
+    throw new Error("proxyToken is empty");
+  }
+  if (typeof proxyToken !== "string") {
+    throw new Error("proxyToken is not a string");
+  }
+
+  // hostMap is a map of target hosts to their corresponding proxy domains
+  const hostMap = JSON.parse(`{{ .host_map | json }}`);
+  if (Object.keys(hostMap).length === 0) {
+    throw new Error("hostMap is empty");
+  }
+  if (
+    !Object.entries(hostMap).every(
+      ([targetHost, proxyDomain]) =>
+        typeof targetHost === "string" &&
+        targetHost.length > 0 &&
+        typeof proxyDomain === "string" &&
+        proxyDomain.length > 0
+    )
+  ) {
+    throw new Error("hostMap contains invalid entries");
+  }
+
+  // forbiddenPaths is a list of regular expressions that match URLs
+  // that should be disabled in the document
   const forbiddenPaths = JSON.parse(`{{ .forbidden_paths | json }}`);
+  if (!Array.isArray(forbiddenPaths)) {
+    throw new Error("forbiddenPaths is not an array");
+  }
+  if (forbiddenPaths.length === 0) {
+    throw new Error("forbiddenPaths is empty");
+  }
+  if (!forbiddenPaths.every((path) => typeof path === "string")) {
+    throw new Error("forbiddenPaths contains non-string values");
+  }
+
+  // retryConfig is the configuration for the retry mechanism
+  const retryConfig = JSON.parse(`{{ .retry_config | json }}`);
+  if (!typeof retryConfig === "object") {
+    throw new Error("retryConfig is not an object");
+  }
+
+  // validStatusCodes is a set of valid HTTP status codes for retrying
+  const validStatusCodes = new Set([
+    // 4xx Client Error
+    400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414,
+    415, 416, 417, 418, 421, 422, 423, 424, 425, 426, 428, 429, 431, 451,
+    // 5xx Server Error
+    500, 501, 502, 503, 504, 505, 506, 507, 508, 510, 511,
+  ]);
+
+  // Validate retry configuration
+  // retryCodes is an array of status codes that should be retried
+  const retryCodes =
+    retryConfig.retry_codes &&
+    Array.isArray(retryConfig.retry_codes) &&
+    retryConfig.retry_codes.length > 0 &&
+    retryConfig.retry_codes.every(
+      (code) =>
+        typeof code === "number" &&
+        Number.isInteger(code) &&
+        validStatusCodes.has(code)
+    )
+      ? retryConfig.retry_codes
+      : [];
+
+  // maxRetries is the maximum number of retries for a request
+  const maxRetries =
+    retryConfig.max_retries &&
+    typeof retryConfig.max_retries === "number" &&
+    retryConfig.max_retries >= 0 &&
+    Number.isInteger(retryConfig.max_retries)
+      ? retryConfig.max_retries
+      : 0;
+
+  // retryDelay is the delay between retries in milliseconds
+  const retryDelay =
+    retryConfig.retry_delay &&
+    typeof retryConfig.retry_delay === "number" &&
+    retryConfig.retry_delay >= 0
+      ? retryConfig.retry_delay
+      : 0;
+
+  /*
+   * Utility functions
+   */
 
   // replaceHost function replaces the host of the given URL with the proxy domain
   // and appends the proxy token if the original URL contains a token
@@ -13,6 +100,11 @@
     if (!url) return url;
     try {
       const urlObj = new URL(url, window.location.href);
+      if (!["http:", "https:", "ws:", "wss:"].includes(urlObj.protocol)) {
+        return url;
+      }
+
+      // Check if the URL contains a token and replace it with the proxy token
       const tokenValue = urlObj.searchParams.get("token");
       if (tokenValue && tokenValue.length > 0) {
         urlObj.searchParams.delete("token");
@@ -20,6 +112,8 @@
           urlObj.searchParams.set("proxy_token", proxyToken);
         }
       }
+
+      // Replace the host with the proxy domain
       for (const [targetHost, proxyDomain] of Object.entries(hostMap)) {
         if (
           urlObj.host === targetHost ||
@@ -69,14 +163,17 @@
   // and its children
   // It also hides certain elements in the settings page
   const processNode = (node) => {
+    if (!(node instanceof Element)) return;
+
+    const patterns = forbiddenPaths.map((path) => new RegExp(path));
+
     // Handle attributes
     if (node.nodeType === Node.ELEMENT_NODE) {
       ["href", "src", "action", "data-url"].forEach((attr) => {
         if (node.hasAttribute(attr)) {
           const attrValue = node.getAttribute(attr);
 
-          forbiddenPaths.forEach((path) => {
-            const pattern = new RegExp(path);
+          patterns.forEach((pattern) => {
             if (pattern.test(attrValue)) {
               node.style.opacity = "0.6";
               node.style.pointerEvents = "none";
@@ -129,6 +226,10 @@
     }
   };
 
+  /*
+   * Main logic
+   */
+
   // Create a MutationObserver to handle dynamically added content
   const observer = new MutationObserver((mutations) => {
     mutations.forEach((mutation) => {
@@ -151,84 +252,141 @@
   });
 
   // Handle dynamic XHR/Fetch requests
+
   const originalFetch = window.fetch;
-  window.fetch = function (input, init) {
-    // Initialize headers if not present
-    init = init || {};
-    init.headers = new Headers(init.headers || {});
-
-    // Add CORS headers
-    init.credentials = "include";
-    init.headers.set("X-Requested-With", "XMLHttpRequest");
-
-    // Process URL
-    if (typeof input === "string") {
-      input = replaceHost(input);
-    } else if (input instanceof Request) {
-      const newHeaders = new Headers(input.headers);
-      newHeaders.set("X-Requested-With", "XMLHttpRequest");
-
-      input = new Request(replaceHost(input.url), {
-        ...input,
-        credentials: "include",
-        headers: newHeaders,
-      });
+  window.fetch = async function (input, init) {
+    // Store the original body if present
+    let bodyBuffer = null;
+    if (init?.body) {
+      bodyBuffer = init.body;
     }
 
-    try {
-      return originalFetch.call(this, input, init);
-    } catch (e) {
-      console.debug("Retrying fetch with no-cors mode:", e);
-      // Retry with no-cors mode
-      init = init || {};
-      init.mode = "no-cors";
-      return originalFetch.call(this, input, init);
+    let url = typeof input === "string" ? input : input.url;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Reset body for each attempt if it exists
+        if (bodyBuffer) {
+          init = { ...init, body: bodyBuffer };
+        }
+
+        // Process URL and create request
+        let processedInput;
+        if (typeof input === "string") {
+          processedInput = replaceHost(input);
+        } else if (input instanceof Request) {
+          processedInput = new Request(replaceHost(input.url), input);
+        }
+
+        const response = await originalFetch.call(this, processedInput, init);
+
+        // Handle specific status codes
+        if (retryCodes.includes(response.status)) {
+          console.warn(
+            `Retryable status code ${response.status}, retrying request`,
+            {
+              url,
+              attempt,
+              status: response.status,
+            }
+          );
+
+          // Wait before retry with exponential backoff
+          await new Promise((resolve) =>
+            setTimeout(resolve, retryDelay * (attempt + 1))
+          );
+          continue;
+        }
+
+        return response;
+      } catch (error) {
+        if (attempt === maxRetries) {
+          throw error;
+        }
+
+        console.warn("Network error, retrying request", {
+          url,
+          attempt,
+          error,
+        });
+
+        await new Promise((resolve) =>
+          setTimeout(resolve, retryDelay * (attempt + 1))
+        );
+      }
     }
   };
 
   const originalXHROpen = XMLHttpRequest.prototype.open;
+  const originalXHRSend = XMLHttpRequest.prototype.send;
+
   XMLHttpRequest.prototype.open = function (method, url, ...args) {
+    this._retryConfig = {
+      maxRetries: maxRetries,
+      retryDelay: retryDelay,
+      attempt: 0,
+      originalUrl: url,
+      originalMethod: method,
+      originalArgs: args,
+    };
     url = replaceHost(url);
+    return originalXHROpen.call(this, method, url, ...args);
+  };
 
-    try {
-      const xhr = originalXHROpen.call(this, method, url, ...args);
+  XMLHttpRequest.prototype.send = function (body) {
+    // Store original callbacks
+    const originalOnload = this.onload;
+    const originalOnerror = this.onerror;
+    const originalBody = body;
 
-      // Set CORS properties
-      this.withCredentials = true;
-      this.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+    const retry = () => {
+      this._retryConfig.attempt++;
+      const delay = this._retryConfig.retryDelay * this._retryConfig.attempt;
 
-      // Add error handler for CORS failures
-      this.addEventListener("error", () => {
-        // Create new XHR with no-cors
-        const noCorsXhr = new XMLHttpRequest();
-        originalXHROpen.call(noCorsXhr, method, url, ...args);
-        noCorsXhr.withCredentials = false; // Disable credentials for no-cors
-
-        // Copy over event listeners
-        for (const prop in this) {
-          if (prop.startsWith("on")) {
-            noCorsXhr[prop] = this[prop];
-          }
-        }
-
-        // Send the request
-        noCorsXhr.send(this._sendData);
+      console.warn(`Retrying XHR request`, {
+        url: this._retryConfig.originalUrl,
+        attempt: this._retryConfig.attempt,
       });
 
-      // Store send data for potential retry
-      const originalSend = this.send;
-      this.send = function (data) {
-        this._sendData = data;
-        return originalSend.call(this, data);
-      };
+      setTimeout(() => {
+        // Reopen connection
+        originalXHROpen.call(
+          this,
+          this._retryConfig.originalMethod,
+          replaceHost(this._retryConfig.originalUrl),
+          ...this._retryConfig.originalArgs
+        );
+        // Resend with original body
+        originalXHRSend.call(this, originalBody);
+      }, delay);
+    };
 
-      return xhr;
-    } catch (e) {
-      console.debug("Retrying XHR with no-cors:", e);
-      const noCorsXhr = originalXHROpen.call(this, method, url, ...args);
-      this.withCredentials = false;
-      return noCorsXhr;
-    }
+    this.onload = (e) => {
+      if (retryCodes.includes(this.status)) {
+        if (this._retryConfig.attempt < this._retryConfig.maxRetries) {
+          retry();
+          return;
+        }
+      }
+
+      // Call original onload if exists
+      if (originalOnload) {
+        originalOnload.call(this, e);
+      }
+    };
+
+    this.onerror = (e) => {
+      if (this._retryConfig.attempt < this._retryConfig.maxRetries) {
+        retry();
+        return;
+      }
+      // Call original onerror if exists
+      if (originalOnerror) {
+        originalOnerror.call(this, e);
+      }
+    };
+
+    return originalXHRSend.call(this, body);
   };
 
   // Handle WebSocket connections since kagi uses them
@@ -238,4 +396,14 @@
     url = replaceHost(url);
     return new originalWebSocket(url, protocols);
   };
+
+  const cleanup = () => {
+    observer.disconnect();
+    window.fetch = originalFetch;
+    window.WebSocket = originalWebSocket;
+    XMLHttpRequest.prototype.open = originalXHROpen;
+    XMLHttpRequest.prototype.send = originalXHRSend;
+  };
+
+  window.addEventListener("unload", cleanup);
 })();
