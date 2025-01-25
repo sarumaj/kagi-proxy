@@ -266,11 +266,15 @@ func SignInWeb(ctx *gin.Context) {
 	nonce, _ := common.GetNonce()
 
 	// Decode the QR code and the OTP setup URL from the location fragment
-	data, err := common.DecodeFromQuery(query.Data, []byte(common.ConfigProxyPass()), session)
-	if err != nil {
-		common.Logger().Warn("failed to decode data from query", zap.Error(err))
-	} else if !web.SessionSave(session, ctx) {
-		return
+	var data map[string]any
+	if len(query.Data) > 0 {
+		var err error
+		data, err = common.DecodeFromQuery(query.Data, []byte(common.ConfigProxyPass()), session)
+		if err != nil {
+			common.Logger().Warn("failed to decode data from query", zap.Error(err))
+		} else if !web.SessionSave(session, ctx) {
+			return
+		}
 	}
 
 	common.Logger().Debug("Displaying login page",

@@ -23,20 +23,7 @@ var examples = map[string]common.Policy{
 		},
 		common.Allow: common.Ruleset{
 			common.Rule{Path: "/favicon.ico", PathType: common.Exact},
-		},
-	},
-	"domain_based_policy.json": {
-		common.Deny: common.Ruleset{
-			common.Rule{Schema: "https", Domain: "kagi.com", Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"billing"}}},
-			common.Rule{Schema: "https", Domain: "kagi.com", Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"gift"}}},
-			common.Rule{Schema: "https", Domain: "kagi.com", Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"user_details"}}},
-			common.Rule{Schema: "https", Domain: "kagi.com", Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"api"}, "generate": {"1"}}},
-			common.Rule{Schema: "https", Domain: "kagi.com", Path: "/api/user_token", PathType: common.Prefix},
-		},
-		common.Allow: common.Ruleset{
-			common.Rule{Schema: "https", Domain: "kagi.com", Path: "/favicon.ico", PathType: common.Exact},
-			common.Rule{Schema: "https", Domain: "*.kagi.com", Path: "/favicon.ico", PathType: common.Exact},
-			common.Rule{Schema: "https", Domain: "status.*", Path: "/summary.json", PathType: common.Exact},
+			common.Rule{Path: `/favicon(?:-\d+x\d+)\.png`, PathType: common.Regex},
 		},
 	},
 }

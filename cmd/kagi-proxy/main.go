@@ -75,27 +75,34 @@ func main() {
 		// Allow rules are public and do not require authentication.
 		common.WithProxyGuardPolicy(common.Policy{
 			common.Deny: common.Ruleset{
+				common.Rule{Path: "/api/user_token", PathType: common.Prefix},
+				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"api"}, "generate": {"1"}}},
 				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"billing"}}},
 				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"gift"}}},
 				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"user_details"}}},
-				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"api"}, "generate": {"1"}}},
-				common.Rule{Path: "/api/user_token", PathType: common.Prefix},
 			}.Merge(extraPolicy[common.Deny]),
 			common.Allow: common.Ruleset{
-				common.Rule{Path: "/favicon.ico", PathType: common.Exact},
+				common.Rule{Path: "/discord", PathType: common.Prefix},
+				common.Rule{Path: `/favicon(?:(?:-\d+x\d+)?\.png|\.ico)`, PathType: common.Regex},
 			}.Merge(extraPolicy[common.Allow]),
 		}),
 		common.WithProxyPass(*proxyPass),                   // Set the proxy password.
 		common.WithProxyRedirectLoginURL("/signin"),        // Redirect to the login page if the user is not authenticated.
 		common.WithProxySessionSecret(*proxySessionSecret), // Set the session secret for the proxy session cookie.
 		common.WithProxyOTPSecret(*proxyOTPSecret),         // Set the OTP secret for the second factor authentication.
+		// Define the public domains that do not require authentication.
+		common.WithProxyPublicDomains([]string{
+			"help." + *proxyHost,
+			"status." + *proxyHost,
+		}),
 		// Define the target hosts for the proxy. The key is the proxy host and the value is the target host.
 		// The target host is used to create the request URL and forward the request.
 		common.WithProxyTargetHosts(map[string]string{
 			*proxyHost:                "kagi.com",
-			"translate." + *proxyHost: "translate.kagi.com",
 			"assets." + *proxyHost:    "assets.kagi.com",
+			"help." + *proxyHost:      "help.kagi.com",
 			"status." + *proxyHost:    "status.kagi.com",
+			"translate." + *proxyHost: "translate.kagi.com",
 		}),
 		common.WithProxyUser(*proxyUser),       // Set the proxy user.
 		common.WithSessionToken(*sessionToken), // Set the session token for the Kagi website, will be delivered as a cookie.
@@ -114,19 +121,14 @@ func main() {
 	router := gin.New(func(e *gin.Engine) {
 		// Set the HTML templates.
 		e.SetHTMLTemplate(templates.HTMLTemplates())
-
 		// Recover from panics.
 		e.Use(middlewares.Recover())
-
 		// Log all requests.
 		e.Use(middlewares.Logger())
-
 		// Create a new cookie store.
 		e.Use(middlewares.Session())
-
-		// Setup CORS
+		// Setup CORS.
 		e.Use(middlewares.CORS())
-
 		// Use the rate limiting middleware.
 		e.Use(middlewares.Rate(*limitRPS, int(*limitBurst)))
 	})

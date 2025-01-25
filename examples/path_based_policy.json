@@ -3,6 +3,10 @@
     {
       "path": "/favicon.ico",
       "path_type": "exact"
+    },
+    {
+      "path": "/favicon(?:-\\d+x\\d+)\\.png",
+      "path_type": "regex"
     }
   ],
   "deny": [
