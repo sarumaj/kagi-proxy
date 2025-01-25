@@ -20,8 +20,16 @@ import (
 // If the user is not authenticated, it redirects to the login page.
 func BasicAuth() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		for _, publicDomain := range common.ConfigProxyPublicDomains() {
+			if ctx.Request.Host == publicDomain {
+				common.Logger().Debug("Skipping basic auth for public domain", zap.String("domain", publicDomain))
+				ctx.Next()
+				return
+			}
+		}
+
 		if common.ConfigProxyGuardPolicy()[common.Allow].Evaluate(ctx.Request, common.Deny) {
-			common.Logger().Debug("Skipping basic auth for path", zap.String("path", ctx.Request.URL.Path))
+			common.Logger().Debug("Skipping basic auth for url", zap.String("url", ctx.Request.URL.String()))
 			ctx.Next()
 			return
 		}
@@ -79,11 +87,20 @@ func BasicAuth() gin.HandlerFunc {
 // It uses the ConfigProxyGuardPolicy().BlackList for evaluation.
 func ProxyGuard() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
+		for _, publicDomain := range common.ConfigProxyPublicDomains() {
+			if ctx.Request.Host == publicDomain {
+				common.Logger().Debug("Skipping proxy guard for public domain", zap.String("domain", publicDomain))
+				ctx.Next()
+				return
+			}
+		}
+
 		if common.ConfigProxyGuardPolicy()[common.Deny].Evaluate(ctx.Request, common.Allow) {
 			ctx.Next()
 			return
 		}
 
+		common.Logger().Debug("Request denied", zap.String("url", ctx.Request.URL.String()))
 		nonce, _ := common.GetNonce()
 		web.SetContentSecurityHeaders(ctx.Writer, nonce)
 		ctx.HTML(http.StatusForbidden, "error.html", gin.H{

@@ -20,6 +20,7 @@ type (
 		ProxyGuardPolicy      Policy
 		ProxyPass             string
 		ProxyOTPSecret        string
+		ProxyPublicDomains    []string
 		ProxyRedirectLoginURL string
 		ProxySessionSecret    string
 		ProxyTargetHosts      hosts
@@ -97,6 +98,13 @@ func ConfigProxyOTPSecret() string {
 	return config.ProxyOTPSecret
 }
 
+// ConfigProxyPublicDomains returns the public domains.
+func ConfigProxyPublicDomains() []string {
+	configMux.Lock()
+	defer configMux.Unlock()
+	return config.ProxyPublicDomains
+}
+
 // ConfigProxyRedirectLoginURL returns the proxy redirect login URL.
 func ConfigProxyRedirectLoginURL() string {
 	configMux.Lock()
@@ -162,6 +170,15 @@ func WithProxyOTPSecret(secret string) option {
 	return func(pc *cfg) {
 		configMux.Lock()
 		pc.ProxyOTPSecret = secret
+		configMux.Unlock()
+	}
+}
+
+// WithProxyPublicDomains sets the public domains.
+func WithProxyPublicDomains(domains []string) option {
+	return func(pc *cfg) {
+		configMux.Lock()
+		pc.ProxyPublicDomains = domains
 		configMux.Unlock()
 	}
 }
