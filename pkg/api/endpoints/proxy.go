@@ -38,16 +38,26 @@ type (
 // It injects a session token into the request if it is not already present.
 // It also modifies the request to use the target host specified in the
 // targetHostConfig.
-func (ProxyState) Director(req *http.Request) {
+func (p ProxyState) Director(req *http.Request) {
 	// Modify the request to use the target host
 	req.URL.Scheme = "https"
 	common.Logger().Debug("Modifying request from director", zap.String("url", req.URL.String()))
 	targetHost := common.ConfigProxyTargetHosts().Get(req.Host, "kagi.com")
 	req.URL.Host, req.Host = targetHost, targetHost
 
-	common.Logger().Debug("Proxying request", zap.String("url", req.URL.String()))
-	common.Logger().Debug("Checking for session token in request query", zap.String("url", req.URL.String()))
+	// Apply form data rules
+	for _, rule := range common.ConfigProxyGuardPolicy().Override {
+		if ok, err := rule.PatchForm(req); err != nil {
+			common.Logger().Error("Failed to apply form data rule", zap.Reflect("rule", rule), zap.Error(err))
+		} else {
+			common.Logger().Debug("Applying form data rule", zap.Reflect("rule", rule), zap.Bool("patched", ok))
+		}
+	}
 
+	common.Logger().Debug("Proxying request", zap.String("url", req.URL.String()))
+
+	// Verify the session token
+	common.Logger().Debug("Checking for session token in request query", zap.String("url", req.URL.String()))
 	token := req.URL.Query().Get("token")
 	if len(token) > 0 && common.CTEqual(token, common.ConfigSessionToken()) {
 		common.Logger().Debug("Session token found in request query", zap.String("sessionToken", token))
@@ -154,10 +164,11 @@ func (p ProxyState) ModifyResponse(resp *http.Response) error {
 	// Generate the proxy script
 	var script bytes.Buffer
 	if err := templates.TextTemplates().ExecuteTemplate(&script, "proxy.js", map[string]any{
-		"forbidden_paths": common.ConfigProxyGuardPolicy()[common.Deny].RegexList(),
-		"host_map":        common.ConfigProxyTargetHosts().Reverse(),
-		"proxy_token":     common.B64URLNoPadding.EncodeToString(hash),
-		"retry_config":    p.RetryConfig,
+		"forbidden_elements": common.ConfigProxyGuardPolicy().Override.JsSelectors(),
+		"forbidden_paths":    common.ConfigProxyGuardPolicy().Deny.RegexList(),
+		"host_map":           common.ConfigProxyTargetHosts().Reverse(),
+		"proxy_token":        common.B64URLNoPadding.EncodeToString(hash),
+		"retry_config":       p.RetryConfig,
 	}); err != nil {
 		return err
 	}

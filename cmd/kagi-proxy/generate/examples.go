@@ -14,16 +14,26 @@ import (
 
 var examples = map[string]common.Policy{
 	"path_based_policy.json": {
-		common.Deny: common.Ruleset{
+		Deny: common.Ruleset{
 			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"billing"}}},
 			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"gift"}}},
 			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"user_details"}}},
 			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"api"}, "generate": {"1"}}},
 			common.Rule{Path: "/api/user_token", PathType: common.Prefix},
 		},
-		common.Allow: common.Ruleset{
+		Allow: common.Ruleset{
 			common.Rule{Path: "/favicon.ico", PathType: common.Exact},
 			common.Rule{Path: `/favicon(?:-\d+x\d+)\.png`, PathType: common.Regex},
+		},
+	},
+	"form_data_override_policy.json": {
+		Override: common.Ruleset{
+			common.Rule{Path: "/settings", PathType: common.Exact, FormData: url.Values{"debug_translation": {"false"}},
+				JsSelectors: []string{
+					`input#settings_translate_debug`,
+					`label[for="settings_translate_debug"]`,
+				},
+			},
 		},
 	},
 }

@@ -1,12 +1,16 @@
 package common
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +21,7 @@ const (
 
 const (
 	// Exact matches the path exactly.
-	Exact pathType = iota + 1
+	Exact pathType = iota
 	// Prefix matches the path as a prefix.
 	Prefix
 	// Regex matches the path as an arbitrary regex.
@@ -25,17 +29,37 @@ const (
 )
 
 type (
-	effect bool
-
-	pathType int
-
 	diff struct {
 		Added   Ruleset
 		Removed Ruleset
 	}
 
+	effect bool
+
+	pathType int
+
+	// Policy is the access control policy.
+	// If effect is allow, the request is allowed publicly without proxy authentication.
+	// If effect is deny, the request is explicit denied and not accessible via the proxy.
+	Policy struct {
+		// Allow is the list of allow rules.
+		// All allowed requests are publicly accessible without proxy authentication.
+		Allow Ruleset `json:"allow,omitempty"`
+		// Deny is the list of deny rules.
+		// All denied requests are explicitly denied and not accessible via the proxy at all.
+		Deny Ruleset `json:"deny,omitempty"`
+		// Override is the list of form data override rules.
+		// The override rules are applied to matching form data requests
+		// to ensure the form data does not get altered.
+		Override Ruleset `json:"override,omitempty"`
+	}
+
 	// Rule is an access control rule.
 	Rule struct {
+		// FormData is the form data to patch the request with.
+		FormData url.Values `json:"form_data,omitempty"`
+		// JsSelectors is a list of JavaScript selectors.
+		JsSelectors []string `json:"js_selectors,omitempty"`
 		// Path is the URL path.
 		Path string `json:"path"`
 		// PathType is the type of the path. It can be exact, prefix, or regex.
@@ -46,11 +70,6 @@ type (
 
 	// Ruleset is a set of rules.
 	Ruleset []Rule
-
-	// Policy is the access control policy.
-	// If effect is allow, the request is allowed publicly without proxy authentication.
-	// If effect is deny, the request is explicit denied and not accessible via the proxy.
-	Policy map[effect]Ruleset
 )
 
 // MarshalText implements the encoding.TextMarshaler interface.
@@ -101,6 +120,80 @@ func (p *pathType) UnmarshalText(text []byte) error {
 		return fmt.Errorf("invalid path type: %s", text)
 	}
 	return nil
+}
+
+// Match returns true if the rule matches the request.
+func (r Rule) Match(req *http.Request) bool {
+	reqPath := strings.ToLower(req.URL.Path)
+
+	switch r.PathType {
+	case Exact:
+		if !strings.EqualFold(reqPath, r.Path) {
+			return false
+		}
+
+	case Prefix:
+		if !strings.HasPrefix(reqPath, strings.ToLower(r.Path)) {
+			return false
+		}
+
+	case Regex:
+		if pattern, err := regexp.Compile(strings.ToLower(r.Path)); err != nil || !pattern.MatchString(reqPath) {
+			if err != nil {
+				Logger().Error("Invalid regex pattern", zap.Error(err), zap.String("pattern", r.Path))
+			}
+			return false
+		}
+	}
+
+	reqQuery := req.URL.Query()
+	if len(r.Query) > 0 {
+		for key := range r.Query {
+			if !reqQuery.Has(key) || reqQuery.Get(key) != r.Query.Get(key) {
+				return false
+			}
+		}
+
+	}
+
+	return true
+}
+
+// PatchForm patches the request form data with the rule query parameters.
+// It returns true if the request form data has been patched.
+func (r Rule) PatchForm(req *http.Request) (bool, error) {
+	switch {
+	case
+		len(r.FormData) == 0,          // No form data to patch
+		!r.Match(req),                 // Rule does not match the request
+		req.Method != http.MethodPost, // Not a POST request
+		// Not a form data request
+		!strings.HasPrefix(req.Header.Get("Content-Type"), gin.MIMEPOSTForm),
+		req.Body == nil: // No request body to patch
+
+		return false, nil
+	}
+
+	var buffer bytes.Buffer
+	if _, err := buffer.ReadFrom(req.Body); err != nil {
+		return false, err
+	}
+
+	req.Body = Closer(bytes.NewReader(buffer.Bytes()))
+	formData, err := url.ParseQuery(buffer.String())
+	if err != nil {
+		return false, err
+	}
+
+	for key, values := range r.FormData {
+		formData[key] = values
+	}
+
+	formDataEncoded := formData.Encode()
+	req.Body = io.NopCloser(strings.NewReader(formDataEncoded))
+	req.ContentLength = int64(len(formDataEncoded))
+	req.Header.Set("Content-Length", strconv.Itoa(len(formDataEncoded)))
+	return true, nil
 }
 
 // Regex returns the regex representation of the rule.
@@ -155,7 +248,9 @@ func (rules Ruleset) Contains(other Rule) bool {
 	for _, rule := range rules {
 		if rule.Path == other.Path &&
 			rule.PathType == other.PathType &&
-			rule.Query.Encode() == other.Query.Encode() {
+			rule.FormData.Encode() == other.FormData.Encode() &&
+			rule.Query.Encode() == other.Query.Encode() &&
+			strings.Join(rule.JsSelectors, ",") == strings.Join(other.JsSelectors, ",") {
 
 			return true
 		}
@@ -185,47 +280,22 @@ func (rules Ruleset) Compare(other Ruleset) diff {
 // Evaluate returns the effect of the first matching rule.
 // If no rule matches, it returns noMatchEffect.
 func (rules Ruleset) Evaluate(req *http.Request, noMatchEffect effect) effect {
-	reqQuery := req.URL.Query()
-	reqPath := strings.ToLower(req.URL.Path)
 	for _, r := range rules {
-		switch r.PathType {
-		case Exact:
-			if !strings.EqualFold(reqPath, r.Path) {
-				continue
-			}
-
-		case Prefix:
-			if !strings.HasPrefix(reqPath, strings.ToLower(r.Path)) {
-				continue
-			}
-
-		case Regex:
-			if pattern, err := regexp.Compile(strings.ToLower(r.Path)); err != nil || !pattern.MatchString(reqPath) {
-				if err != nil {
-					Logger().Error("Invalid regex pattern", zap.Error(err), zap.String("pattern", r.Path))
-				}
-				continue
-			}
+		if r.Match(req) {
+			return !noMatchEffect
 		}
-
-		if len(r.Query) > 0 {
-			queryMatch := true
-			for key := range r.Query {
-				if !reqQuery.Has(key) || reqQuery.Get(key) != r.Query.Get(key) {
-					queryMatch = false
-					break
-				}
-			}
-
-			if !queryMatch {
-				continue
-			}
-		}
-
-		return !noMatchEffect
 	}
 
 	return noMatchEffect
+}
+
+// JsSelectors returns a list of JavaScript selectors for all rules.
+func (rules Ruleset) JsSelectors() []string {
+	var selectors []string
+	for _, rule := range rules {
+		selectors = append(selectors, rule.JsSelectors...)
+	}
+	return selectors
 }
 
 // Len returns the number of rules in the ruleset.

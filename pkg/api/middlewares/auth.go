@@ -28,7 +28,7 @@ func BasicAuth() gin.HandlerFunc {
 			}
 		}
 
-		if common.ConfigProxyGuardPolicy()[common.Allow].Evaluate(ctx.Request, common.Deny) {
+		if common.ConfigProxyGuardPolicy().Allow.Evaluate(ctx.Request, common.Deny) {
 			common.Logger().Debug("Skipping basic auth for url", zap.String("url", ctx.Request.URL.String()))
 			ctx.Next()
 			return
@@ -95,7 +95,7 @@ func ProxyGuard() gin.HandlerFunc {
 			}
 		}
 
-		if common.ConfigProxyGuardPolicy()[common.Deny].Evaluate(ctx.Request, common.Allow) {
+		if common.ConfigProxyGuardPolicy().Deny.Evaluate(ctx.Request, common.Allow) {
 			ctx.Next()
 			return
 		}

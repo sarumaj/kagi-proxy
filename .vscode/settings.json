@@ -3,6 +3,7 @@
     "ABAC",
     "akhileshns",
     "andybalholm",
+    "apiv",
     "autocompleteerror",
     "buildvcs",
     "bytedance",
@@ -41,6 +42,7 @@
     "mattn",
     "Menlo",
     "MIMEHTML",
+    "MIMEPOST",
     "multierr",
     "multitemplate",
     "netgo",
@@ -59,11 +61,13 @@
     "securecookie",
     "Segoe",
     "signup",
+    "speechpb",
     "sslmode",
     "Stringp",
     "superdomain",
     "superdomains",
     "Titov",
+    "toggleable",
     "totp",
     "trimpath",
     "ttlcache",
@@ -72,7 +76,8 @@
     "Uintp",
     "usedocker",
     "utrack",
-    "vasile"
+    "vasile",
+    "xxxs"
   ],
   "cSpell.ignorePaths": ["go.sum", "go.mod"]
 }

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"slices"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -22,16 +23,17 @@ import (
 )
 
 var (
-	limitBurst         = flag.Uint("limit-burst", 12, "burst size for rate limiting")
-	limitRPS           = flag.Float64("limit-rps", 90, "requests per second for rate limiting")
-	port               = flag.Uint("port", common.Getenv[uint]("PORT", 8080), "port to listen on")
-	proxyExtraPolicy   = flag.String("proxy-extra-policy", "", "path to a JSON file with additional policy rules")
-	proxyHost          = flag.String("proxy-host", common.Getenv("PROXY_HOST", "kagi.com"), "proxy domain")
-	proxyOTPSecret     = flag.String("proxy-otp-secret", common.Getenv("PROXY_OTP_SECRET", "test"), "OTP encryption secret for the proxy session")
-	proxyPass          = flag.String("proxy-pass", common.Getenv("PROXY_PASS", "pass"), "proxy user password")
-	proxySessionSecret = flag.String("proxy-session-secret", common.Getenv("PROXY_SESSION_SECRET", "test"), "cookie encryption secret for the proxy session")
-	proxyUser          = flag.String("proxy-user", common.Getenv("PROXY_USER", "user"), "proxy user")
-	sessionToken       = flag.String("session-token", common.Getenv("KAGI_SESSION_TOKEN", ""), "session token for the Kagi website")
+	limitBurst           = flag.Uint("limit-burst", 12, "burst size for rate limiting")
+	limitRPS             = flag.Float64("limit-rps", 90, "requests per second for rate limiting")
+	port                 = flag.Uint("port", common.Getenv[uint]("PORT", 8080), "port to listen on")
+	proxyExtraPolicy     = flag.String("proxy-extra-policy", "", "path to a JSON file with additional policy rules")
+	proxyHost            = flag.String("proxy-host", common.Getenv("PROXY_HOST", "kagi.com"), "proxy domain")
+	proxyOTPSecret       = flag.String("proxy-otp-secret", common.Getenv("PROXY_OTP_SECRET", "test"), "OTP encryption secret for the proxy session")
+	proxyPass            = flag.String("proxy-pass", common.Getenv("PROXY_PASS", "pass"), "proxy user password")
+	proxySessionDuration = flag.Duration("proxy-session-duration", common.Getenv("PROXY_SESSION_DURATION", time.Hour*24*30), "session duration for the proxy session")
+	proxySessionSecret   = flag.String("proxy-session-secret", common.Getenv("PROXY_SESSION_SECRET", "test"), "cookie encryption secret for the proxy session")
+	proxyUser            = flag.String("proxy-user", common.Getenv("PROXY_USER", "user"), "proxy user")
+	sessionToken         = flag.String("session-token", common.Getenv("KAGI_SESSION_TOKEN", ""), "session token for the Kagi website")
 )
 
 func main() {
@@ -69,44 +71,64 @@ func main() {
 		common.Logger().Debug("Extra policy", zap.Reflect("extraPolicy", extraPolicy), zap.String("file", *proxyExtraPolicy))
 	}
 
-	common.ConfigureProxy(
-		// Define ABAC rules. The rules are used to determine if a request is allowed.
-		// Denial rules are explicit and make endpoints inaccessible through the proxy.
-		// Allow rules are public and do not require authentication.
-		common.WithProxyGuardPolicy(common.Policy{
-			common.Deny: common.Ruleset{
-				common.Rule{Path: "/api/user_token", PathType: common.Prefix},
-				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"api"}, "generate": {"1"}}},
-				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"billing"}}},
-				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"gift"}}},
-				common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"user_details"}}},
-			}.Merge(extraPolicy[common.Deny]),
-			common.Allow: common.Ruleset{
-				common.Rule{Path: "/discord", PathType: common.Prefix},
-				common.Rule{Path: `/favicon(?:(?:-\d+x\d+)?\.png|\.ico)`, PathType: common.Regex},
-			}.Merge(extraPolicy[common.Allow]),
-		}),
-		common.WithProxyPass(*proxyPass),                   // Set the proxy password.
-		common.WithProxyRedirectLoginURL("/signin"),        // Redirect to the login page if the user is not authenticated.
-		common.WithProxySessionSecret(*proxySessionSecret), // Set the session secret for the proxy session cookie.
-		common.WithProxyOTPSecret(*proxyOTPSecret),         // Set the OTP secret for the second factor authentication.
-		// Define the public domains that do not require authentication.
-		common.WithProxyPublicDomains([]string{
-			"help." + *proxyHost,
-			"status." + *proxyHost,
-		}),
-		// Define the target hosts for the proxy. The key is the proxy host and the value is the target host.
-		// The target host is used to create the request URL and forward the request.
-		common.WithProxyTargetHosts(map[string]string{
-			*proxyHost:                "kagi.com",
-			"assets." + *proxyHost:    "assets.kagi.com",
-			"help." + *proxyHost:      "help.kagi.com",
-			"status." + *proxyHost:    "status.kagi.com",
-			"translate." + *proxyHost: "translate.kagi.com",
-		}),
-		common.WithProxyUser(*proxyUser),       // Set the proxy user.
-		common.WithSessionToken(*sessionToken), // Set the session token for the Kagi website, will be delivered as a cookie.
-	)
+	// Define ABAC rules. The rules are used to determine if a request is allowed.
+	// Denial rules are explicit and make endpoints inaccessible through the proxy.
+	// Allow rules are public and do not require authentication.
+	// Override rules are used to override the form data of a request before it is sent.
+	// The JS selectors in Override rules are used to disable the corresponding form elements.
+	common.SetProxyGuardPolicy(common.Policy{
+		Deny: common.Ruleset{
+			common.Rule{Path: "/api/user_token", PathType: common.Prefix},
+			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"api"}, "generate": {"1"}}},
+			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"billing"}}},
+			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"gift"}}},
+			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"user_details"}}},
+		}.Merge(extraPolicy.Deny),
+		Allow: common.Ruleset{
+			common.Rule{Path: "/discord", PathType: common.Prefix},
+			common.Rule{Path: `/favicon(?:(?:-\d+x\d+)?\.png|\.ico)`, PathType: common.Regex},
+		}.Merge(extraPolicy.Allow),
+		Override: common.Ruleset{
+			common.Rule{
+				FormData: url.Values{"translate_debug": {"false"}},
+				JsSelectors: []string{
+					`input#settings_translate_debug`,
+					`label[for="settings_translate_debug"]`,
+				},
+				Path:     "/settings",
+				PathType: common.Exact,
+			},
+			common.Rule{
+				FormData: url.Values{"retention": {"2"}},
+				JsSelectors: []string{
+					`button._0_k_ui_dropdown.k_ui_dropdown.__basic.min-w-xxxs`,
+				},
+				Path:     "/settings/ast",
+				PathType: common.Exact,
+			},
+		}.Merge(extraPolicy.Override),
+	})
+	common.SetProxyPass(*proxyPass)                       // Set the proxy password.
+	common.SetProxyRedirectLoginURL("/signin")            // Redirect to the login page if the user is not authenticated.
+	common.SetProxySessionDuration(*proxySessionDuration) // Set the session duration for the proxy session.
+	common.SetProxySessionSecret(*proxySessionSecret)     // Set the session secret for the proxy session cookie.
+	common.SetProxyOTPSecret(*proxyOTPSecret)             // Set the OTP secret for the second factor authentication.
+	// Define the public domains that do not require authentication.
+	common.SetProxyPublicDomains([]string{
+		"help." + *proxyHost,
+		"status." + *proxyHost,
+	})
+	// Define the target hosts for the proxy. The key is the proxy host and the value is the target host.
+	// The target host is used to create the request URL and forward the request.
+	common.SetProxyTargetHosts(common.HostMap{
+		*proxyHost:                "kagi.com",
+		"assets." + *proxyHost:    "assets.kagi.com",
+		"help." + *proxyHost:      "help.kagi.com",
+		"status." + *proxyHost:    "status.kagi.com",
+		"translate." + *proxyHost: "translate.kagi.com",
+	})
+	common.SetProxyUser(*proxyUser)       // Set the proxy user.
+	common.SetSessionToken(*sessionToken) // Set the session token for the Kagi website, will be delivered as a cookie.
 
 	environ := os.Environ()
 	slices.Sort(environ)

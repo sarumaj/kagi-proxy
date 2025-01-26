@@ -36,11 +36,18 @@
   if (!Array.isArray(forbiddenPaths)) {
     throw new Error("forbiddenPaths is not an array");
   }
-  if (forbiddenPaths.length === 0) {
-    throw new Error("forbiddenPaths is empty");
-  }
   if (!forbiddenPaths.every((path) => typeof path === "string")) {
     throw new Error("forbiddenPaths contains non-string values");
+  }
+
+  // forbiddenElements is a list of CSS selectors that match elements
+  // that should be disabled in the document
+  const forbiddenElements = JSON.parse(`{{ .forbidden_elements | json }}`);
+  if (!Array.isArray(forbiddenElements)) {
+    throw new Error("forbiddenElements is not an array");
+  }
+  if (!forbiddenElements.every((element) => typeof element === "string")) {
+    throw new Error("forbiddenElements contains non-string values");
   }
 
   // retryConfig is the configuration for the retry mechanism
@@ -166,36 +173,41 @@
     if (!(node instanceof Element)) return;
 
     const patterns = forbiddenPaths.map((path) => new RegExp(path));
+    const disableElement = (element) => {
+      element.style.opacity = "0.6";
+      element.style.pointerEvents = "none";
+      element.style.cursor = "not-allowed";
+      element.disabled = true;
+    };
 
     // Handle attributes
     if (node.nodeType === Node.ELEMENT_NODE) {
-      ["href", "src", "action", "data-url"].forEach((attr) => {
-        if (node.hasAttribute(attr)) {
-          const attrValue = node.getAttribute(attr);
-
-          patterns.forEach((pattern) => {
-            if (pattern.test(attrValue)) {
-              node.style.opacity = "0.6";
-              node.style.pointerEvents = "none";
-              node.style.cursor = "not-allowed";
-              node.disabled = true;
-            }
-          });
-
-          let newValue = attrValue;
-
-          // Handle javascript: URLs
-          if (attrValue.startsWith("javascript:")) {
-            newValue = replaceJavaScriptURL(attrValue);
-          } else {
-            newValue = replaceHost(attrValue);
-          }
-
-          if (newValue !== attrValue) {
-            node.setAttribute(attr, newValue);
-          }
+      for (const selector of forbiddenElements) {
+        if (node.matches(selector)) {
+          disableElement(node);
+          break;
         }
-      });
+      }
+
+      const attributes = ["href", "src", "action", "data-url"];
+      for (const attr of attributes) {
+        if (!node.hasAttribute(attr)) continue;
+
+        const attrValue = node.getAttribute(attr);
+
+        const newValue = attrValue.startsWith("javascript:")
+          ? replaceJavaScriptURL(attrValue)
+          : replaceHost(attrValue);
+
+        if (newValue !== attrValue) {
+          node.setAttribute(attr, newValue);
+        }
+
+        if (patterns.some((pattern) => pattern.test(attrValue))) {
+          disableElement(node);
+          continue;
+        }
+      }
     }
 
     // Handle inline scripts
@@ -252,7 +264,6 @@
   });
 
   // Handle dynamic XHR/Fetch requests
-
   const originalFetch = window.fetch;
   window.fetch = async function (input, init) {
     // Store the original body if present

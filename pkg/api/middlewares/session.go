@@ -2,7 +2,6 @@ package middlewares
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -26,7 +25,7 @@ func Session() gin.HandlerFunc {
 		Domain: domain, // Required to support wildcard subdomains
 		Path:   "/",
 		// 0: session cookie until the browser is closed, -1: delete the cookie, math.MaxInt32: 68 years
-		MaxAge:   int((24 * 7 * time.Hour).Seconds()),
+		MaxAge:   int(common.ConfigProxySessionDuration().Seconds()),
 		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,

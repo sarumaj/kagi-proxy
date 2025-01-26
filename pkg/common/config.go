@@ -3,38 +3,30 @@ package common
 import (
 	"strings"
 	"sync"
+	"time"
 
 	"go.uber.org/zap"
 )
 
-var (
-	configMux sync.Mutex
-	config    = cfg{
-		ProxyTargetHosts:      hosts{},
-		ProxyRedirectLoginURL: "/signin",
-	}
+const (
+	proxyGuardPolicy      = "proxyGuardPolicy"
+	proxyPass             = "proxyPass"
+	proxyOTPSecret        = "proxyOTPSecret"
+	proxyPublicDomains    = "proxyPublicDomains"
+	proxyRedirectLoginURL = "proxyRedirectLoginURL"
+	proxySessionDuration  = "proxySessionDuration"
+	proxySessionSecret    = "proxySessionSecret"
+	proxyTargetHosts      = "proxyTargetHosts"
+	proxyUser             = "proxyUser"
+	sessionToken          = "sessionToken"
 )
 
-type (
-	cfg struct {
-		ProxyGuardPolicy      Policy
-		ProxyPass             string
-		ProxyOTPSecret        string
-		ProxyPublicDomains    []string
-		ProxyRedirectLoginURL string
-		ProxySessionSecret    string
-		ProxyTargetHosts      hosts
-		ProxyUser             string
-		SessionToken          string
-	}
+var config = sync.Map{}
 
-	option func(*cfg)
-
-	hosts map[string]string
-)
+type HostMap map[string]string
 
 // Base returns the base host.
-func (t hosts) Base() (base string) {
+func (t HostMap) Base() (base string) {
 	var shortest string
 	for host := range t {
 		if len(shortest) == 0 || len(host) < len(shortest) {
@@ -48,7 +40,7 @@ func (t hosts) Base() (base string) {
 // Get returns the target host for given proxy domain.
 // If the target host is not found, it returns the default value.
 // If the default value is not provided, it returns "NXDOMAIN".
-func (t hosts) Get(host, def string) string {
+func (t HostMap) Get(host, def string) string {
 	if targetHost, ok := t[host]; ok {
 		return targetHost
 	}
@@ -69,163 +61,78 @@ func (t hosts) Get(host, def string) string {
 }
 
 // Reverse returns the reversed hosts mapping.
-func (t hosts) Reverse() hosts {
-	reversed := make(hosts, len(t))
+func (t HostMap) Reverse() HostMap {
+	reversed := make(HostMap, len(t))
 	for k, v := range t {
 		reversed[v] = k
 	}
 	return reversed
 }
 
-// ConfigProxyGuardPolicy returns the proxy guard rules.
-func ConfigProxyGuardPolicy() Policy {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxyGuardPolicy
+func configGet[T any](key string) T {
+	i, _ := config.Load(key)
+	v, _ := i.(T)
+	return v
 }
+
+// ConfigProxyGuardPolicy returns the proxy guard rules.
+func ConfigProxyGuardPolicy() Policy { return configGet[Policy](proxyGuardPolicy) }
 
 // ConfigProxyPass returns the proxy password.
-func ConfigProxyPass() string {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxyPass
-}
+func ConfigProxyPass() string { return configGet[string](proxyPass) }
 
 // ConfigProxyOTPSecret returns the proxy OTP secret.
-func ConfigProxyOTPSecret() string {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxyOTPSecret
-}
+func ConfigProxyOTPSecret() string { return configGet[string](proxyOTPSecret) }
 
 // ConfigProxyPublicDomains returns the public domains.
-func ConfigProxyPublicDomains() []string {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxyPublicDomains
-}
+func ConfigProxyPublicDomains() []string { return configGet[[]string](proxyPublicDomains) }
 
 // ConfigProxyRedirectLoginURL returns the proxy redirect login URL.
-func ConfigProxyRedirectLoginURL() string {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxyRedirectLoginURL
+func ConfigProxyRedirectLoginURL() string { return configGet[string](proxyRedirectLoginURL) }
+
+// ConfigProxySessionDuration returns the proxy session duration.
+func ConfigProxySessionDuration() time.Duration {
+	return configGet[time.Duration](proxySessionDuration)
 }
 
 // ConfigProxySessionSecret returns the CSRF secret.
-func ConfigProxySessionSecret() string {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxySessionSecret
-}
+func ConfigProxySessionSecret() string { return configGet[string](proxySessionSecret) }
 
 // ConfigProxyTargetHosts returns the proxy target hosts.
-func ConfigProxyTargetHosts() hosts {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxyTargetHosts
-}
+func ConfigProxyTargetHosts() HostMap { return configGet[HostMap](proxyTargetHosts) }
 
 // ConfigProxyUser returns the proxy user.
-func ConfigProxyUser() string {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.ProxyUser
-}
+func ConfigProxyUser() string { return configGet[string](proxyUser) }
 
 // ConfigSessionToken returns the session token.
-func ConfigSessionToken() string {
-	configMux.Lock()
-	defer configMux.Unlock()
-	return config.SessionToken
-}
+func ConfigSessionToken() string { return configGet[string](sessionToken) }
 
-// ConfigureProxy configures the proxy.
-func ConfigureProxy(opts ...option) {
-	for _, opt := range opts {
-		opt(&config)
-	}
-}
+// SetProxyGuardPolicy sets the proxy guard rules.
+func SetProxyGuardPolicy(policy Policy) { config.Store(proxyGuardPolicy, policy) }
 
-// WithProxyGuardPolicy sets the proxy guard rules.
-func WithProxyGuardPolicy(policy Policy) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.ProxyGuardPolicy = policy
-		configMux.Unlock()
-	}
-}
+// SetProxyPass sets the proxy password.
+func SetProxyPass(pass string) { config.Store(proxyPass, pass) }
 
-// WithProxyPass sets the proxy password.
-func WithProxyPass(pass string) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.ProxyPass = pass
-		configMux.Unlock()
-	}
-}
+// SetProxyOTPSecret sets the proxy OTP secret.
+func SetProxyOTPSecret(secret string) { config.Store(proxyOTPSecret, secret) }
 
-// WithProxyOTPSecret sets the proxy OTP secret.
-func WithProxyOTPSecret(secret string) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.ProxyOTPSecret = secret
-		configMux.Unlock()
-	}
-}
+// SetProxyPublicDomains sets the public domains.
+func SetProxyPublicDomains(domains []string) { config.Store(proxyPublicDomains, domains) }
 
-// WithProxyPublicDomains sets the public domains.
-func WithProxyPublicDomains(domains []string) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.ProxyPublicDomains = domains
-		configMux.Unlock()
-	}
-}
+// SetProxyRedirectLoginURL sets the proxy redirect login URL.
+func SetProxyRedirectLoginURL(url string) { config.Store(proxyRedirectLoginURL, url) }
 
-// WithProxyRedirectLoginURL sets the proxy redirect login URL.
-func WithProxyRedirectLoginURL(url string) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.ProxyRedirectLoginURL = url
-		configMux.Unlock()
-	}
-}
+// SetProxySessionDuration sets the proxy session duration.
+func SetProxySessionDuration(duration time.Duration) { config.Store(proxySessionDuration, duration) }
 
-// WithProxySessionSecret sets the CSRF secret.
-func WithProxySessionSecret(secret string) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.ProxySessionSecret = secret
-		configMux.Unlock()
-	}
-}
+// SetProxySessionSecret sets the CSRF secret.
+func SetProxySessionSecret(secret string) { config.Store(proxySessionSecret, secret) }
 
-// WithSessionToken sets the session token.
-func WithSessionToken(token string) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.SessionToken = token
-		configMux.Unlock()
-	}
-}
+// SetSessionToken sets the session token.
+func SetSessionToken(token string) { config.Store(sessionToken, token) }
 
-// WithProxyTargetHosts sets the proxy target hosts.
-func WithProxyTargetHosts(hosts map[string]string) option {
-	return func(pc *cfg) {
-		if hosts != nil {
-			configMux.Lock()
-			pc.ProxyTargetHosts = hosts
-			configMux.Unlock()
-		}
-	}
-}
+// SetProxyTargetHosts sets the proxy target hosts.
+func SetProxyTargetHosts(hosts HostMap) { config.Store(proxyTargetHosts, hosts) }
 
-// WithProxyUser sets the proxy user.
-func WithProxyUser(user string) option {
-	return func(pc *cfg) {
-		configMux.Lock()
-		pc.ProxyUser = user
-		configMux.Unlock()
-	}
-}
+// SetProxyUser sets the proxy user.
+func SetProxyUser(user string) { config.Store(proxyUser, user) }
