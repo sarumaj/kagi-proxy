@@ -26,7 +26,7 @@ var (
 	limitBurst           = flag.Uint("limit-burst", 12, "burst size for rate limiting")
 	limitRPS             = flag.Float64("limit-rps", 90, "requests per second for rate limiting")
 	port                 = flag.Uint("port", common.Getenv[uint]("PORT", 8080), "port to listen on")
-	proxyExtraPolicy     = flag.String("proxy-extra-policy", "", "path to a JSON file with additional policy rules")
+	proxyExtraPolicy     = flag.String("proxy-extra-policy", "", "path to a JSON file with additional policy rules, see https://github.com/sarumaj/kagi-proxy/tree/main/examples")
 	proxyHost            = flag.String("proxy-host", common.Getenv("PROXY_HOST", "kagi.com"), "proxy domain")
 	proxyOTPSecret       = flag.String("proxy-otp-secret", common.Getenv("PROXY_OTP_SECRET", "test"), "OTP encryption secret for the proxy session")
 	proxyPass            = flag.String("proxy-pass", common.Getenv("PROXY_PASS", "pass"), "proxy user password")

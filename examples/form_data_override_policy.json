@@ -1,0 +1,17 @@
+{
+  "override": [
+    {
+      "form_data": {
+        "debug_translation": [
+          "false"
+        ]
+      },
+      "js_selectors": [
+        "input#settings_translate_debug",
+        "label[for=\"settings_translate_debug\"]"
+      ],
+      "path": "/settings",
+      "path_type": "exact"
+    }
+  ]
+}
