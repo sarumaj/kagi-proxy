@@ -20,16 +20,12 @@ import (
 // If the user is not authenticated, it redirects to the login page.
 func BasicAuth() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		for _, publicDomain := range common.ConfigProxyPublicDomains() {
-			if ctx.Request.Host == publicDomain {
-				common.Logger().Debug("Skipping basic auth for public domain", zap.String("domain", publicDomain))
-				ctx.Next()
-				return
-			}
-		}
+		if common.ConfigProxyPublicDomains().Contains(ctx.Request.Host) ||
+			common.ConfigProxyGuardPolicy().Allow.Evaluate(ctx.Request, common.Deny) == common.Allow {
 
-		if common.ConfigProxyGuardPolicy().Allow.Evaluate(ctx.Request, common.Deny) {
-			common.Logger().Debug("Skipping basic auth for url", zap.String("url", ctx.Request.URL.String()))
+			common.Logger().Debug("Skipping basic auth authentication",
+				zap.String("url", ctx.Request.URL.String()),
+				zap.String("host", ctx.Request.Host))
 			ctx.Next()
 			return
 		}
@@ -87,15 +83,12 @@ func BasicAuth() gin.HandlerFunc {
 // It uses the ConfigProxyGuardPolicy().BlackList for evaluation.
 func ProxyGuard() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		for _, publicDomain := range common.ConfigProxyPublicDomains() {
-			if ctx.Request.Host == publicDomain {
-				common.Logger().Debug("Skipping proxy guard for public domain", zap.String("domain", publicDomain))
-				ctx.Next()
-				return
-			}
-		}
+		if common.ConfigProxyPublicDomains().Contains(ctx.Request.Host) ||
+			common.ConfigProxyGuardPolicy().Deny.Evaluate(ctx.Request, common.Allow) == common.Allow {
 
-		if common.ConfigProxyGuardPolicy().Deny.Evaluate(ctx.Request, common.Allow) {
+			common.Logger().Debug("Skipping guard policy",
+				zap.String("url", ctx.Request.URL.String()),
+				zap.String("host", ctx.Request.Host))
 			ctx.Next()
 			return
 		}

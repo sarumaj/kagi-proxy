@@ -119,14 +119,12 @@ func (ProxyState) ErrorHandler(w http.ResponseWriter, r *http.Request, err error
 	w.Header().Set("Retry-After", "30")
 	w.WriteHeader(http.StatusServiceUnavailable)
 
-	if err := templates.HTMLTemplates().ExecuteTemplate(w, "error.html", map[string]any{
+	common.FatalOnError("Failed to execute error template", templates.HTMLTemplates().ExecuteTemplate(w, "error.html", map[string]any{
 		"csp":   w.Header().Get("Content-Security-Policy"),
 		"code":  http.StatusServiceUnavailable,
 		"error": html.EscapeString(err.Error()),
 		"nonce": nonce,
-	}); err != nil {
-		common.Logger().Fatal("Failed to execute error template", zap.Error(err))
-	}
+	}))
 }
 
 // ModifyResponse is a function that modifies the response before it is sent.

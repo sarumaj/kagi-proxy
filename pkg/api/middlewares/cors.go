@@ -8,7 +8,6 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/sarumaj/kagi-proxy/pkg/common"
-	"go.uber.org/zap"
 )
 
 func CORS() gin.HandlerFunc {
@@ -42,9 +41,7 @@ func CORS() gin.HandlerFunc {
 	}
 	config.AddExposeHeaders("Location", "Content-Disposition")
 	config.AllowMethods = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions}
-	if err := config.Validate(); err != nil {
-		common.Logger().Fatal("Invalid CORS configuration", zap.Error(err))
-	}
+	common.FatalOnError("Invalid CORS configuration", config.Validate())
 
 	return cors.New(config)
 }

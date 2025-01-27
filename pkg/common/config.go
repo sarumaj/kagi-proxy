@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	ip2locationApiKey     = "ip2locationApiKey"
 	proxyGuardPolicy      = "proxyGuardPolicy"
 	proxyPass             = "proxyPass"
 	proxyOTPSecret        = "proxyOTPSecret"
@@ -23,7 +24,22 @@ const (
 
 var config = sync.Map{}
 
-type HostMap map[string]string
+type (
+	// Domains is a list of domains.
+	Domains []string
+	// HostMap is a map of proxy host domains to target host domains.
+	HostMap map[string]string
+)
+
+// Contains returns true if the domains contain the domain.
+func (d Domains) Contains(domain string) bool {
+	for _, d := range d {
+		if strings.EqualFold(d, domain) {
+			return true
+		}
+	}
+	return false
+}
 
 // Base returns the base host.
 func (t HostMap) Base() (base string) {
@@ -75,6 +91,9 @@ func configGet[T any](key string) T {
 	return v
 }
 
+// ConfigIP2LocationApiKey returns the IP2Location API key.
+func ConfigIP2LocationApiKey() string { return configGet[string](ip2locationApiKey) }
+
 // ConfigProxyGuardPolicy returns the proxy guard rules.
 func ConfigProxyGuardPolicy() Policy { return configGet[Policy](proxyGuardPolicy) }
 
@@ -85,7 +104,7 @@ func ConfigProxyPass() string { return configGet[string](proxyPass) }
 func ConfigProxyOTPSecret() string { return configGet[string](proxyOTPSecret) }
 
 // ConfigProxyPublicDomains returns the public domains.
-func ConfigProxyPublicDomains() []string { return configGet[[]string](proxyPublicDomains) }
+func ConfigProxyPublicDomains() Domains { return configGet[Domains](proxyPublicDomains) }
 
 // ConfigProxyRedirectLoginURL returns the proxy redirect login URL.
 func ConfigProxyRedirectLoginURL() string { return configGet[string](proxyRedirectLoginURL) }
@@ -107,6 +126,9 @@ func ConfigProxyUser() string { return configGet[string](proxyUser) }
 // ConfigSessionToken returns the session token.
 func ConfigSessionToken() string { return configGet[string](sessionToken) }
 
+// SetIP2LocationApiKey sets the IP2Location API key.
+func SetIP2LocationApiKey(apiKey string) { config.Store(ip2locationApiKey, apiKey) }
+
 // SetProxyGuardPolicy sets the proxy guard rules.
 func SetProxyGuardPolicy(policy Policy) { config.Store(proxyGuardPolicy, policy) }
 
@@ -117,7 +139,7 @@ func SetProxyPass(pass string) { config.Store(proxyPass, pass) }
 func SetProxyOTPSecret(secret string) { config.Store(proxyOTPSecret, secret) }
 
 // SetProxyPublicDomains sets the public domains.
-func SetProxyPublicDomains(domains []string) { config.Store(proxyPublicDomains, domains) }
+func SetProxyPublicDomains(domains Domains) { config.Store(proxyPublicDomains, domains) }
 
 // SetProxyRedirectLoginURL sets the proxy redirect login URL.
 func SetProxyRedirectLoginURL(url string) { config.Store(proxyRedirectLoginURL, url) }

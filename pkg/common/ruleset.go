@@ -2,10 +2,12 @@ package common
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,13 +17,13 @@ import (
 )
 
 const (
-	Allow effect = true
-	Deny  effect = false
+	Allow Effect = true
+	Deny  Effect = false
 )
 
 const (
 	// Exact matches the path exactly.
-	Exact pathType = iota
+	Exact PathType = iota
 	// Prefix matches the path as a prefix.
 	Prefix
 	// Regex matches the path as an arbitrary regex.
@@ -29,14 +31,14 @@ const (
 )
 
 type (
-	diff struct {
+	Diff struct {
 		Added   Ruleset
 		Removed Ruleset
 	}
 
-	effect bool
+	Effect bool
 
-	pathType int
+	PathType int
 
 	// Policy is the access control policy.
 	// If effect is allow, the request is allowed publicly without proxy authentication.
@@ -63,7 +65,7 @@ type (
 		// Path is the URL path.
 		Path string `json:"path"`
 		// PathType is the type of the path. It can be exact, prefix, or regex.
-		PathType pathType `json:"path_type"`
+		PathType PathType `json:"path_type"`
 		// Query is the URL query parameters.
 		Query url.Values `json:"query,omitempty"`
 	}
@@ -73,7 +75,7 @@ type (
 )
 
 // MarshalText implements the encoding.TextMarshaler interface.
-func (e effect) MarshalText() (text []byte, err error) {
+func (e Effect) MarshalText() (text []byte, err error) {
 	if e {
 		return []byte("allow"), nil
 	}
@@ -81,7 +83,7 @@ func (e effect) MarshalText() (text []byte, err error) {
 }
 
 // UnmarshalText implements the encoding.TextUnmarshaler interface.
-func (e *effect) UnmarshalText(text []byte) error {
+func (e *Effect) UnmarshalText(text []byte) error {
 	switch string(text) {
 	case "allow":
 		*e = Allow
@@ -94,7 +96,7 @@ func (e *effect) UnmarshalText(text []byte) error {
 }
 
 // MarshalText implements the encoding.TextMarshaler interface.
-func (p pathType) MarshalText() (text []byte, err error) {
+func (p PathType) MarshalText() (text []byte, err error) {
 	switch p {
 	case Exact:
 		return []byte("exact"), nil
@@ -108,7 +110,7 @@ func (p pathType) MarshalText() (text []byte, err error) {
 }
 
 // UnmarshalText implements the encoding.TextUnmarshaler interface.
-func (p *pathType) UnmarshalText(text []byte) error {
+func (p *PathType) UnmarshalText(text []byte) error {
 	switch string(text) {
 	case "exact":
 		*p = Exact
@@ -260,8 +262,8 @@ func (rules Ruleset) Contains(other Rule) bool {
 }
 
 // Compare returns the difference between two rulesets.
-func (rules Ruleset) Compare(other Ruleset) diff {
-	var diff diff
+func (rules Ruleset) Compare(other Ruleset) Diff {
+	var diff Diff
 	for _, rule := range rules {
 		if !other.Contains(rule) {
 			diff.Removed = append(diff.Removed, rule)
@@ -279,7 +281,7 @@ func (rules Ruleset) Compare(other Ruleset) diff {
 
 // Evaluate returns the effect of the first matching rule.
 // If no rule matches, it returns noMatchEffect.
-func (rules Ruleset) Evaluate(req *http.Request, noMatchEffect effect) effect {
+func (rules Ruleset) Evaluate(req *http.Request, noMatchEffect Effect) Effect {
 	for _, r := range rules {
 		if r.Match(req) {
 			return !noMatchEffect
@@ -319,4 +321,29 @@ func (rules Ruleset) RegexList() []string {
 		regexList = append(regexList, rule.Regex())
 	}
 	return regexList
+}
+
+// LoadPolicyFromFile loads a policy from a file.
+// If the path is empty, it returns an empty policy.
+func LoadPolicyFromFile(path string) (*Policy, error) {
+	if len(path) == 0 {
+		return &Policy{}, nil
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+
+	var policy Policy
+	if err := decoder.Decode(&policy); err != nil {
+		return nil, err
+	}
+
+	return &policy, nil
 }

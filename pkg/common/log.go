@@ -38,3 +38,10 @@ func Logger() *zap.Logger {
 
 	return logger
 }
+
+// FatalOnError logs the error and exits the program if the error is not nil.
+func FatalOnError(msg string, err error) {
+	if err != nil {
+		Logger().Fatal(msg, zap.Error(err))
+	}
+}

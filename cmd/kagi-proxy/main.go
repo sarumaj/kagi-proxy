@@ -2,7 +2,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -23,6 +22,7 @@ import (
 )
 
 var (
+	ip2locationApiKey    = flag.String("ip2location-api-key", common.Getenv("IP2LOCATION_API_KEY", ""), "API key for the IP2Location API")
 	limitBurst           = flag.Uint("limit-burst", 12, "burst size for rate limiting")
 	limitRPS             = flag.Float64("limit-rps", 90, "requests per second for rate limiting")
 	port                 = flag.Uint("port", common.Getenv[uint]("PORT", 8080), "port to listen on")
@@ -44,33 +44,24 @@ func main() {
 
 	// Log the server start.
 	common.Logger().Info("Starting server",
+		zap.Bool("ip2locationApiKey", len(*ip2locationApiKey) > 0),
 		zap.Uintp("port", port),
 		zap.Float64p("limitRPS", limitRPS),
 		zap.Uintp("limitBurst", limitBurst),
-		zap.Stringp("sessionToken", sessionToken),
+		zap.Bool("sessionToken", len(*sessionToken) > 0),
+		zap.Durationp("proxySessionDuration", proxySessionDuration),
 		zap.Stringp("proxySessionSecret", proxySessionSecret),
 		zap.Stringp("proxyOTPSecret", proxyOTPSecret),
 		zap.Stringp("proxyUser", proxyUser),
-		zap.Stringp("proxyPass", proxyPass),
+		zap.Bool("proxyPass", len(*proxyPass) > 0),
 		zap.Stringp("proxyHost", proxyHost),
 	)
 
-	var extraPolicy common.Policy
-	if len(*proxyExtraPolicy) > 0 {
-		fileDescriptor, err := os.Open(*proxyExtraPolicy)
-		if err != nil {
-			common.Logger().Fatal("Failed to open extra policy file", zap.Error(err))
-		}
+	extraPolicy, err := common.LoadPolicyFromFile(*proxyExtraPolicy)
+	common.FatalOnError("Failed to load extra policy", err)
+	common.Logger().Debug("Extra policy", zap.Reflect("extraPolicy", extraPolicy), zap.String("file", *proxyExtraPolicy))
 
-		decoder := json.NewDecoder(fileDescriptor)
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&extraPolicy); err != nil {
-			common.Logger().Fatal("Failed to decode extra policy file", zap.Error(err))
-		}
-
-		common.Logger().Debug("Extra policy", zap.Reflect("extraPolicy", extraPolicy), zap.String("file", *proxyExtraPolicy))
-	}
-
+	common.SetIP2LocationApiKey(*ip2locationApiKey) // Set the IP2Location API key.
 	// Define ABAC rules. The rules are used to determine if a request is allowed.
 	// Denial rules are explicit and make endpoints inaccessible through the proxy.
 	// Allow rules are public and do not require authentication.
@@ -114,7 +105,7 @@ func main() {
 	common.SetProxySessionSecret(*proxySessionSecret)     // Set the session secret for the proxy session cookie.
 	common.SetProxyOTPSecret(*proxyOTPSecret)             // Set the OTP secret for the second factor authentication.
 	// Define the public domains that do not require authentication.
-	common.SetProxyPublicDomains([]string{
+	common.SetProxyPublicDomains(common.Domains{
 		"help." + *proxyHost,
 		"status." + *proxyHost,
 	})
@@ -182,7 +173,5 @@ func main() {
 	server.Handler = router
 
 	// Serve the content.
-	if err := server.ListenAndServe(); err != nil {
-		common.Logger().Fatal("Server error", zap.Error(err))
-	}
+	common.FatalOnError("Server error", server.ListenAndServe())
 }

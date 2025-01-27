@@ -6,9 +6,11 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -20,6 +22,34 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+)
+
+const ip2locationApiAddress = "https://api.ip2location.io"
+
+type (
+	// ErrorResponse is the response structure for errors from the IP2Location API.
+	ErrorResponse struct {
+		Error struct {
+			ErrorCode    int    `json:"error_code"`
+			ErrorMessage string `json:"error_message"`
+		} `json:"error"`
+	}
+
+	// LookupResponse is the response structure for the IP2Location API.
+	LookupResponse struct {
+		IP          string  `json:"ip"`
+		CountryCode string  `json:"country_code"`
+		CountryName string  `json:"country_name"`
+		RegionName  string  `json:"region_name"`
+		CityName    string  `json:"city_name"`
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		ZipCode     string  `json:"zip_code"`
+		TimeZone    string  `json:"time_zone"`
+		Asn         string  `json:"asn"`
+		As          string  `json:"as"`
+		IsProxy     bool    `json:"is_proxy"`
+	}
 )
 
 // CompressResponseBody compresses the response body using the appropriate compression algorithm.
@@ -149,6 +179,37 @@ func InjectJsScript(response *http.Response, data io.Reader) (bool, error) {
 
 	response.Body = common.Closer(&buffer)
 	return tokenInjected, nil
+}
+
+// LookupIP looks up the IP address using the IP2Location API (https://www.ip2location.io/).
+// It returns geo-location information about the IP address.
+func LookupIP(ip string) (*LookupResponse, error) {
+	query := url.Values{"ip": {ip}}
+	if apiKey := common.ConfigIP2LocationApiKey(); len(apiKey) > 0 {
+		query.Set("key", apiKey)
+	}
+
+	response, err := http.Get(ip2locationApiAddress + "?" + query.Encode())
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		var errorResp ErrorResponse
+		if err := json.NewDecoder(response.Body).Decode(&errorResp); err != nil {
+			return nil, err
+		}
+
+		return nil, fmt.Errorf("error code: %d, error message: %s", errorResp.Error.ErrorCode, errorResp.Error.ErrorMessage)
+	}
+
+	var lookupResp LookupResponse
+	if err := json.NewDecoder(response.Body).Decode(&lookupResp); err != nil {
+		return nil, err
+	}
+
+	return &lookupResp, nil
 }
 
 // ModifyCSP modifies the Content-Security-Policy header to allow the proxy scripts.

@@ -1,6 +1,8 @@
 package common
 
-import "io"
+import (
+	"io"
+)
 
 var _ io.ReadWriteCloser = closer{}
 
