@@ -69,31 +69,31 @@
   // retryCodes is an array of status codes that should be retried
   const retryCodes =
     retryConfig.retry_codes &&
-    Array.isArray(retryConfig.retry_codes) &&
-    retryConfig.retry_codes.length > 0 &&
-    retryConfig.retry_codes.every(
-      (code) =>
-        typeof code === "number" &&
-        Number.isInteger(code) &&
-        validStatusCodes.has(code)
-    )
+      Array.isArray(retryConfig.retry_codes) &&
+      retryConfig.retry_codes.length > 0 &&
+      retryConfig.retry_codes.every(
+        (code) =>
+          typeof code === "number" &&
+          Number.isInteger(code) &&
+          validStatusCodes.has(code)
+      )
       ? retryConfig.retry_codes
       : [];
 
   // maxRetries is the maximum number of retries for a request
   const maxRetries =
     retryConfig.max_retries &&
-    typeof retryConfig.max_retries === "number" &&
-    retryConfig.max_retries >= 0 &&
-    Number.isInteger(retryConfig.max_retries)
+      typeof retryConfig.max_retries === "number" &&
+      retryConfig.max_retries >= 0 &&
+      Number.isInteger(retryConfig.max_retries)
       ? retryConfig.max_retries
       : 0;
 
   // retryDelay is the delay between retries in milliseconds
   const retryDelay =
     retryConfig.retry_delay &&
-    typeof retryConfig.retry_delay === "number" &&
-    retryConfig.retry_delay >= 0
+      typeof retryConfig.retry_delay === "number" &&
+      retryConfig.retry_delay >= 0
       ? retryConfig.retry_delay
       : 0;
 
@@ -248,20 +248,45 @@
       mutation.addedNodes.forEach((node) => {
         if (node.nodeType === Node.ELEMENT_NODE) {
           processNode(node);
-          node.querySelectorAll("*").forEach(processNode);
+          try {
+            const elements = node.querySelectorAll("*");
+            elements.forEach(processNode);
+          } catch (e) {
+            console.debug("Error processing node children:", e);
+          }
         }
       });
     });
   });
 
   // Process existing content
-  document.querySelectorAll("*").forEach(processNode);
+  const processExistingContent = () => {
+    try {
+      const elements = document.querySelectorAll("*");
+      elements.forEach(processNode);
+    } catch (e) {
+      console.debug("Error processing existing content:", e);
+    }
+  };
 
-  // Observe future changes
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-  });
+  // Wait for DOM to be ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      processExistingContent();
+      // Observe future changes
+      observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+      });
+    });
+  } else {
+    processExistingContent();
+    // Observe future changes
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+  }
 
   // Handle dynamic XHR/Fetch requests
   const originalFetch = window.fetch;
