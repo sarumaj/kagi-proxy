@@ -14,7 +14,7 @@ jobs:
         go: [1.23]
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    name: Deploy Space Invaders to Heroku
+    name: Deploy Kagi Proxy to Heroku
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
