@@ -138,6 +138,7 @@ func (p ProxyState) ModifyResponse(resp *http.Response) error {
 	resp.Header.Del("Access-Control-Allow-Headers")
 	resp.Header.Del("Access-Control-Expose-Headers")
 	resp.Header.Del("Access-Control-Max-Age")
+	resp.Header.Del("Permissions-Policy")
 
 	// Ignore non-HTML content
 	if contentType := resp.Header.Get("Content-Type"); resp.Body == nil || !strings.Contains(contentType, gin.MIMEHTML) {

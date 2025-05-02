@@ -317,6 +317,7 @@ func SessionSave(session sessions.Session, ctx *gin.Context) (success bool) {
 // SetContentSecurityHeaders sets the Content-Security-Policy, X-Frame-Options, and X-Content-Type-Options headers.
 // It uses the nonce to set the script-src and style-src directives.
 func SetContentSecurityHeaders(w http.ResponseWriter, nonce string) {
+	// Set Content-Security-Policy header
 	w.Header().Set("Content-Security-Policy", strings.Join([]string{
 		"default-src 'none'",
 		"script-src 'self' 'nonce-" + nonce + "'",
@@ -332,6 +333,10 @@ func SetContentSecurityHeaders(w http.ResponseWriter, nonce string) {
 		"worker-src 'none'",
 		"upgrade-insecure-requests",
 	}, "; "))
-	w.Header().Set("X-Frame-Options", "DENY")
+
+	// Prevent MIME type sniffing
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+
+	// Prevent clickjacking
+	w.Header().Set("X-Frame-Options", "DENY")
 }
