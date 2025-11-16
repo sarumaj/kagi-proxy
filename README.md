@@ -1,5 +1,7 @@
 # kagi-proxy
 
+> **Caution!** The Proxy is not under-development anymore. Fork and develop on your own if required.
+
 Proxy service for [© kagi.com](https://kagi.com). © Kagi offers a **search engine** as payware which is less vigilantly subjected to questionable SEO practices. Furthermore, it offers **AI assistant** service. The **AI assistant** ships most recent available GPT solutions under one subscription, e.g.:
 
 - Anthropic: _Claude 3.5 Sonnet_
