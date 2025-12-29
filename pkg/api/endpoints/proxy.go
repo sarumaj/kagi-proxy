@@ -45,6 +45,14 @@ func (p ProxyState) Director(req *http.Request) {
 	targetHost := common.ConfigProxyTargetHosts().Get(req.Host, "kagi.com")
 	req.URL.Host, req.Host = targetHost, targetHost
 
+	if referer := req.Header.Get("Referer"); referer != "" {
+		req.Header.Set("Referer", common.ConfigProxyTargetHosts().Get(referer, "kagi.com"))
+	}
+
+	if origin := req.Header.Get("Origin"); origin != "" {
+		req.Header.Set("Origin", common.ConfigProxyTargetHosts().Get(origin, "kagi.com"))
+	}
+
 	// Apply form data rules
 	for _, rule := range common.ConfigProxyGuardPolicy().Override {
 		if ok, err := rule.PatchForm(req); err != nil {
@@ -92,6 +100,19 @@ func (p ProxyState) Director(req *http.Request) {
 	common.Logger().Debug("Session token added to request",
 		zap.String("sessionToken", common.ConfigSessionToken()),
 		zap.Reflect("cookies", req.Cookies()))
+
+	// Delete the proxy cookie to prevent leakage
+	cookie, err = req.Cookie("proxy_session")
+	if err == nil && cookie != nil {
+		common.Logger().Debug("Deleting proxy session cookie from request",
+			zap.String("name", cookie.Name),
+			zap.String("value", cookie.Value),
+			zap.String("domain", cookie.Domain),
+			zap.String("path", cookie.Path),
+		)
+		cookie.Expires = time.Unix(0, 0)
+		req.AddCookie(cookie)
+	}
 }
 
 // ErrorHandler is a function that handles errors that occur during the proxying process.
