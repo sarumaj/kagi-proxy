@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"slices"
 	"time"
 
@@ -68,19 +69,23 @@ func main() {
 	// Override rules are used to override the form data of a request before it is sent.
 	// The JS selectors in Override rules are used to disable the corresponding form elements.
 	common.SetProxyGuardPolicy(common.Policy{
-		Deny: common.Ruleset{
-			common.Rule{Path: "/api/user_token", PathType: common.Prefix},
-			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"api"}, "generate": {"1"}}},
-			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"billing"}}},
-			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"gift"}}},
-			common.Rule{Path: "/settings", PathType: common.Exact, Query: url.Values{"p": {"user_details"}}},
+		Deny: common.Ruleset{ // deny sensitive endpoints
+			common.Rule{Path: "/settings/billing", PathType: common.Exact},
+			common.Rule{Path: "/settings/billing_api", PathType: common.Exact},
+			common.Rule{Path: "/settings/billing_plan", PathType: common.Exact},
+			common.Rule{Path: "/settings/user_details", PathType: common.Exact},
+			common.Rule{Path: "/settings/sudo_mode", PathType: common.Exact},
+			common.Rule{Path: "/settings/gift", PathType: common.Exact},
+			// deny API token generation and disabling
+			common.Rule{Path: "/settings/api", PathType: common.Exact, Query: url.Values{"generate": {"1"}}},
+			common.Rule{Path: "/settings/api/user_token/disable", PathType: common.Exact},
 		}.Merge(extraPolicy.Deny),
-		Allow: common.Ruleset{
+		Allow: common.Ruleset{ // allow public endpoints
 			common.Rule{Path: "/discord", PathType: common.Prefix},
 			common.Rule{Path: `/favicon(?:(?:-\d+x\d+)?\.png|\.ico)`, PathType: common.Regex},
 		}.Merge(extraPolicy.Allow),
 		Override: common.Ruleset{
-			common.Rule{
+			common.Rule{ // disable translate debug option
 				FormData: url.Values{"translate_debug": {"false"}},
 				JsSelectors: []string{
 					`input#settings_translate_debug`,
@@ -89,12 +94,20 @@ func main() {
 				Path:     "/settings",
 				PathType: common.Exact,
 			},
-			common.Rule{
+			common.Rule{ // set assistant data retention to 24 hours (selection value "2")
 				FormData: url.Values{"retention": {"2"}},
 				JsSelectors: []string{
 					`button._0_k_ui_dropdown.k_ui_dropdown.__basic.min-w-xxxs`,
 				},
-				Path:     "/settings/ast",
+				Path:     "/settings/assistant",
+				PathType: common.Exact,
+			},
+			common.Rule{ // disable API token generation and disabling buttons
+				JsSelectors: []string{
+					`div.multi-button a.--primary`,
+					`div.multi-button a.--secondary`,
+				},
+				Path:     "/settings/api",
 				PathType: common.Exact,
 			},
 		}.Merge(extraPolicy.Override),
@@ -134,6 +147,20 @@ func main() {
 	router := gin.New(func(e *gin.Engine) {
 		// Set the HTML templates.
 		e.SetHTMLTemplate(templates.HTMLTemplates())
+		// Sanitize path middleware by removing trailing quotes.
+		// Some browsers (or extensions) add quotes to the URL path.
+		// This middleware removes them to avoid 404 errors.
+		// Example: /settings/" -> /settings/
+		// Example: /settings%22 -> /settings
+		e.Use(func(c *gin.Context) {
+			pattern := regexp.MustCompile(`^(.*)(?:\/)?(?:"|%22)$`)
+			if pattern.MatchString(c.Request.URL.Path) {
+				c.Redirect(http.StatusFound, pattern.ReplaceAllString(c.Request.URL.Path, "$1"))
+				c.Abort()
+				return
+			}
+			c.Next()
+		})
 		// Recover from panics.
 		e.Use(middlewares.Recover())
 		// Log all requests.
