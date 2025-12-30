@@ -166,34 +166,9 @@
     }
   };
 
-  // processNode function replaces URLs and, for /assistant, removes disabling/hiding attributes/styles/classes
+  // processNode function replaces URLs
   const processNode = (node) => {
     if (!(node instanceof Element)) return;
-
-    // If on /assistant, remove disabling/hiding attributes/styles/classes
-    if (window.location.pathname === "/assistant") {
-      // Remove disabling/hiding attributes
-      node.removeAttribute("aria-hidden");
-      node.removeAttribute("data-read-only");
-      node.removeAttribute("disabled");
-      node.removeAttribute("hidden");
-
-      // Remove disabling/hiding styles
-      if (node.style) {
-        if (node.style.pointerEvents === "none")
-          node.style.pointerEvents = "auto";
-        if (node.style.opacity !== "1") node.style.opacity = "1";
-        if (node.style.cursor === "not-allowed") node.style.cursor = "auto";
-        if (node.style.display === "none") node.style.display = "";
-      }
-
-      // Remove disabling/hiding classes
-      if (node.classList) {
-        node.classList.remove("disabled");
-        node.classList.remove("read-only");
-        node.classList.remove("empty");
-      }
-    }
 
     const patterns = forbiddenPaths.map((path) => new RegExp(path));
     const disableElement = (element) => {
