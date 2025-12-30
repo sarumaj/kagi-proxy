@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"regexp"
 	"strings"
 	"time"
 
@@ -45,13 +46,16 @@ func (p ProxyState) Director(req *http.Request) {
 	targetHost := common.ConfigProxyTargetHosts().Get(req.Host, "kagi.com")
 	req.URL.Host, req.Host = targetHost, targetHost
 
-	if referer := req.Header.Get("Referer"); referer != "" {
-		req.Header.Set("Referer", common.ConfigProxyTargetHosts().Get(referer, "kagi.com"))
+	// Fix trailing quote in URL path
+	pattern := regexp.MustCompile(`^(.*)(?:\/)?(?:"|%22)$`)
+	if pattern.MatchString(req.URL.Path) {
+		req.URL.Path = pattern.ReplaceAllString(req.URL.Path, "$1")
+		common.Logger().Debug("Modified request URL path to remove trailing quote", zap.String("newPath", req.URL.Path))
 	}
 
-	if origin := req.Header.Get("Origin"); origin != "" {
-		req.Header.Set("Origin", common.ConfigProxyTargetHosts().Get(origin, "kagi.com"))
-	}
+	// Modify Referer and Origin headers to use the target host
+	req.Header.Set("Referer", common.ConfigProxyTargetHosts().Get(req.Header.Get("Referer"), "kagi.com"))
+	req.Header.Set("Origin", common.ConfigProxyTargetHosts().Get(req.Header.Get("Origin"), "kagi.com"))
 
 	// Apply form data rules
 	for _, rule := range common.ConfigProxyGuardPolicy().Override {

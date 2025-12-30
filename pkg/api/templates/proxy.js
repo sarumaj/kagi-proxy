@@ -69,31 +69,31 @@
   // retryCodes is an array of status codes that should be retried
   const retryCodes =
     retryConfig.retry_codes &&
-      Array.isArray(retryConfig.retry_codes) &&
-      retryConfig.retry_codes.length > 0 &&
-      retryConfig.retry_codes.every(
-        (code) =>
-          typeof code === "number" &&
-          Number.isInteger(code) &&
-          validStatusCodes.has(code)
-      )
+    Array.isArray(retryConfig.retry_codes) &&
+    retryConfig.retry_codes.length > 0 &&
+    retryConfig.retry_codes.every(
+      (code) =>
+        typeof code === "number" &&
+        Number.isInteger(code) &&
+        validStatusCodes.has(code)
+    )
       ? retryConfig.retry_codes
       : [];
 
   // maxRetries is the maximum number of retries for a request
   const maxRetries =
     retryConfig.max_retries &&
-      typeof retryConfig.max_retries === "number" &&
-      retryConfig.max_retries >= 0 &&
-      Number.isInteger(retryConfig.max_retries)
+    typeof retryConfig.max_retries === "number" &&
+    retryConfig.max_retries >= 0 &&
+    Number.isInteger(retryConfig.max_retries)
       ? retryConfig.max_retries
       : 0;
 
   // retryDelay is the delay between retries in milliseconds
   const retryDelay =
     retryConfig.retry_delay &&
-      typeof retryConfig.retry_delay === "number" &&
-      retryConfig.retry_delay >= 0
+    typeof retryConfig.retry_delay === "number" &&
+    retryConfig.retry_delay >= 0
       ? retryConfig.retry_delay
       : 0;
 
@@ -166,11 +166,34 @@
     }
   };
 
-  // processNode function replaces URLs in the given DOM node
-  // and its children
-  // It also hides certain elements in the settings page
+  // processNode function replaces URLs and, for /assistant, removes disabling/hiding attributes/styles/classes
   const processNode = (node) => {
     if (!(node instanceof Element)) return;
+
+    // If on /assistant, remove disabling/hiding attributes/styles/classes
+    if (window.location.pathname === "/assistant") {
+      // Remove disabling/hiding attributes
+      node.removeAttribute("aria-hidden");
+      node.removeAttribute("data-read-only");
+      node.removeAttribute("disabled");
+      node.removeAttribute("hidden");
+
+      // Remove disabling/hiding styles
+      if (node.style) {
+        if (node.style.pointerEvents === "none")
+          node.style.pointerEvents = "auto";
+        if (node.style.opacity !== "1") node.style.opacity = "1";
+        if (node.style.cursor === "not-allowed") node.style.cursor = "auto";
+        if (node.style.display === "none") node.style.display = "";
+      }
+
+      // Remove disabling/hiding classes
+      if (node.classList) {
+        node.classList.remove("disabled");
+        node.classList.remove("read-only");
+        node.classList.remove("empty");
+      }
+    }
 
     const patterns = forbiddenPaths.map((path) => new RegExp(path));
     const disableElement = (element) => {
@@ -180,7 +203,7 @@
       element.disabled = true;
     };
 
-    // Handle attributes
+    // Handle attributes for proxy logic
     if (node.nodeType === Node.ELEMENT_NODE) {
       for (const selector of forbiddenElements) {
         if (node.matches(selector)) {

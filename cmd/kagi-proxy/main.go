@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"slices"
 	"time"
 
@@ -147,20 +146,6 @@ func main() {
 	router := gin.New(func(e *gin.Engine) {
 		// Set the HTML templates.
 		e.SetHTMLTemplate(templates.HTMLTemplates())
-		// Sanitize path middleware by removing trailing quotes.
-		// Some browsers (or extensions) add quotes to the URL path.
-		// This middleware removes them to avoid 404 errors.
-		// Example: /settings/" -> /settings/
-		// Example: /settings%22 -> /settings
-		e.Use(func(c *gin.Context) {
-			pattern := regexp.MustCompile(`^(.*)(?:\/)?(?:"|%22)$`)
-			if pattern.MatchString(c.Request.URL.Path) {
-				c.Redirect(http.StatusFound, pattern.ReplaceAllString(c.Request.URL.Path, "$1"))
-				c.Abort()
-				return
-			}
-			c.Next()
-		})
 		// Recover from panics.
 		e.Use(middlewares.Recover())
 		// Log all requests.
