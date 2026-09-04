@@ -94,14 +94,19 @@ func ProxyGuard() gin.HandlerFunc {
 		}
 
 		common.Logger().Debug("Request denied", zap.String("url", ctx.Request.URL.String()))
-		nonce, _ := common.GetNonce()
-		web.SetContentSecurityHeaders(ctx.Writer, nonce)
-		ctx.HTML(http.StatusForbidden, "error.html", gin.H{
-			"code":  http.StatusForbidden,
-			"csp":   ctx.Writer.Header().Get("Content-Security-Policy"),
-			"error": nil,
-			"nonce": nonce,
-		})
-		ctx.Abort()
+		forbid(ctx)
 	}
+}
+
+// forbid answers the request with the error page instead of proxying it.
+func forbid(ctx *gin.Context) {
+	nonce, _ := common.GetNonce()
+	web.SetContentSecurityHeaders(ctx.Writer, nonce)
+	ctx.HTML(http.StatusForbidden, "error.html", gin.H{
+		"code":  http.StatusForbidden,
+		"csp":   ctx.Writer.Header().Get("Content-Security-Policy"),
+		"error": nil,
+		"nonce": nonce,
+	})
+	ctx.Abort()
 }

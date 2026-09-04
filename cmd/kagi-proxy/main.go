@@ -30,6 +30,7 @@ var (
 	proxyHost            = flag.String("proxy-host", common.Getenv("PROXY_HOST", "kagi.com"), "proxy domain")
 	proxyOTPSecret       = flag.String("proxy-otp-secret", common.Getenv("PROXY_OTP_SECRET", "test"), "OTP encryption secret for the proxy session")
 	proxyPass            = flag.String("proxy-pass", common.Getenv("PROXY_PASS", "pass"), "proxy user password")
+	proxyPrivateThreads  = flag.Bool("proxy-private-threads", common.Getenv("PROXY_PRIVATE_THREADS", true), "scope assistant threads to the proxy session that created them")
 	proxySessionDuration = flag.Duration("proxy-session-duration", common.Getenv("PROXY_SESSION_DURATION", time.Hour*24*30), "session duration for the proxy session")
 	proxySessionSecret   = flag.String("proxy-session-secret", common.Getenv("PROXY_SESSION_SECRET", "test"), "cookie encryption secret for the proxy session")
 	proxyUser            = flag.String("proxy-user", common.Getenv("PROXY_USER", "user"), "proxy user")
@@ -54,6 +55,7 @@ func main() {
 		zap.Stringp("proxyOTPSecret", proxyOTPSecret),
 		zap.Stringp("proxyUser", proxyUser),
 		zap.Bool("proxyPass", len(*proxyPass) > 0),
+		zap.Boolp("proxyPrivateThreads", proxyPrivateThreads),
 		zap.Stringp("proxyHost", proxyHost),
 	)
 
@@ -112,6 +114,7 @@ func main() {
 		}.Merge(extraPolicy.Override),
 	})
 	common.SetProxyPass(*proxyPass)                       // Set the proxy password.
+	common.SetProxyPrivateThreads(*proxyPrivateThreads)   // Hide the assistant threads of one proxy session from the others.
 	common.SetProxyRedirectLoginURL("/signin")            // Redirect to the login page if the user is not authenticated.
 	common.SetProxySessionDuration(*proxySessionDuration) // Set the session duration for the proxy session.
 	common.SetProxySessionSecret(*proxySessionSecret)     // Set the session secret for the proxy session cookie.
@@ -169,7 +172,12 @@ func main() {
 
 	// Overwrite the logout route.
 	// Without it, a user could terminate the kagi.com session.
-	router.GET("/logout", endpoints.SignOut)
+	router.GET(endpoints.SignOutPath, endpoints.SignOut)
+
+	// Add the route the injected script reports newly created assistant threads to.
+	// The assistant creates them client side, so this is the only point at which the proxy
+	// learns which session a thread belongs to before the page is loaded again.
+	router.POST(endpoints.ThreadClaimPath, endpoints.ClaimThread)
 
 	// Handle summary.json requests.
 	// Status.kagi.com returns for some requests a valid response but the status is always "404".
@@ -178,7 +186,7 @@ func main() {
 	router.GET("/api/summary.json", endpoints.CheckStatus)
 
 	// Add a proxy route for anything else, do not require authentication for the favicon.
-	router.NoRoute(middlewares.BasicAuth(), middlewares.ProxyGuard(), endpoints.Proxy())
+	router.NoRoute(middlewares.BasicAuth(), middlewares.ProxyGuard(), middlewares.ThreadGuard(), endpoints.Proxy())
 
 	// Install handler on the server
 	server.Handler = router

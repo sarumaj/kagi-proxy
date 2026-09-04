@@ -33,6 +33,8 @@ type (
 		SessionCreatedAt time.Time
 		// SessionId is the session ID.
 		SessionId string
+		// Threads are the assistant threads the session owns.
+		Threads []string
 	}
 )
 
@@ -131,7 +133,7 @@ func (p ProxyState) Director(req *http.Request) {
 	// Rewrite the Referer and Origin headers so that they carry the target host
 	// instead of the proxy host. Both are absolute URLs, not bare host names, and a
 	// header the browser did not send must stay absent: browsers omit Origin on
-	// top-level navigations, so synthesising one marks the request as non-browser.
+	// top-level navigation, so synthesizing one marks the request as non-browser.
 	rewriteURLHeader(req, "Referer")
 	rewriteURLHeader(req, "Origin")
 
@@ -273,8 +275,14 @@ func (p ProxyState) ModifyResponse(resp *http.Response) error {
 		"forbidden_elements": common.ConfigProxyGuardPolicy().Override.JsSelectors(),
 		"forbidden_paths":    common.ConfigProxyGuardPolicy().Deny.RegexList(),
 		"host_map":           common.ConfigProxyTargetHosts().Reverse(),
+		"owned_threads":      p.Threads,
+		"private_threads":    common.ConfigProxyPrivateThreads(),
 		"proxy_token":        common.B64URLNoPadding.EncodeToString(hash),
+		"proxy_user":         common.ConfigProxyUser(),
 		"retry_config":       p.RetryConfig,
+		"signout_url":        SignOutPath,
+		"thread_claim_url":   ThreadClaimPath,
+		"thread_pattern":     common.ThreadPathPattern(),
 	}); err != nil {
 		return err
 	}
@@ -335,6 +343,7 @@ func Proxy() gin.HandlerFunc {
 		session := sessions.Default(ctx)
 		proxyState.SessionCreatedAt = time.Unix(common.QuickGet[int64](session, "created_at"), 0)
 		proxyState.SessionId = common.QuickGet[string](session, "session_id")
+		proxyState.Threads = common.SessionThreads(session)
 
 		// Rewrite supersedes the Director hook deprecated in Go 1.26, and never appends
 		// X-Forwarded-For of its own accord: the client address reaches the target host

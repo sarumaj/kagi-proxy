@@ -97,9 +97,177 @@
       ? retryConfig.retry_delay
       : 0;
 
+  // proxyUser is the account the proxy authenticated the visitor as. The banner names it so
+  // that a proxied tab is recognisable as such, and so is the session that gets signed out.
+  const proxyUser = JSON.parse(`{{ .proxy_user | json }}`) || "";
+
+  // signOutURL ends the proxy session. It is the proxy's own route rather than the target
+  // host's: signing out here must not terminate the shared subscription session.
+  const signOutURL = JSON.parse(`{{ .signout_url | json }}`);
+
+  // privateThreads mirrors the proxy's thread isolation setting.
+  const privateThreads = JSON.parse(`{{ .private_threads | json }}`) === true;
+
+  // threadPathPattern matches the assistant routes that open a single thread. The proxy
+  // authorizes the very same pattern; here it identifies the rows to hide and the
+  // client-side navigation that means a thread has just been created.
+  const threadPathPattern = new RegExp(JSON.parse(`{{ .thread_pattern | json }}`));
+
+  // threadClaimURL is the proxy route a thread created in this tab is reported to.
+  const threadClaimURL = JSON.parse(`{{ .thread_claim_url | json }}`);
+
+  // ownedThreads are the threads this session is allowed to see. They all live in the one
+  // account behind the proxy, so the assistant lists everybody's threads and the ones that
+  // are not in this set get hidden.
+  const ownedThreads = new Set(
+    (JSON.parse(`{{ .owned_threads | json }}`) || []).map((id) =>
+      String(id).toLowerCase()
+    )
+  );
+
+  // bannerId is the id of the proxy's own badge, which is excluded from every rewrite.
+  const bannerId = "kagi-proxy-banner";
+
+  // bannerCollapsedKey remembers, per tab, whether the badge was collapsed to its icon.
+  const bannerCollapsedKey = "kagi-proxy-banner-collapsed";
+
   /*
    * Utility functions
    */
+
+  // isBannerCollapsed and setBannerCollapsed persist the badge state for the tab. Reading
+  // and writing storage throws rather than returning null where the browser blocks site
+  // data, so a failure degrades to the expanded badge.
+  const isBannerCollapsed = () => {
+    try {
+      return window.sessionStorage.getItem(bannerCollapsedKey) === "1";
+    } catch (e) {
+      console.debug("Banner state not readable:", e);
+      return false;
+    }
+  };
+
+  const setBannerCollapsed = (collapsed) => {
+    try {
+      window.sessionStorage.setItem(bannerCollapsedKey, collapsed ? "1" : "0");
+    } catch (e) {
+      console.debug("Banner state not persisted:", e);
+    }
+  };
+
+  // mountBanner pins a badge to the page stating that the site is being proxied and
+  // offering a way out of the proxy session. It is idempotent, so it can be called again
+  // whenever the application replaces the document body.
+  //
+  // Every style is assigned through the CSSOM instead of a stylesheet or a style
+  // attribute: the target host serves a Content-Security-Policy that does not allow inline
+  // styles, and property assignment is the one route it does not block.
+  const mountBanner = () => {
+    if (!document.body || document.getElementById(bannerId)) return;
+
+    const banner = document.createElement("div");
+    banner.id = bannerId;
+    banner.setAttribute("role", "status");
+    Object.assign(banner.style, {
+      alignItems: "center",
+      background: "rgba(20, 20, 22, 0.92)",
+      border: "1px solid rgba(255, 255, 255, 0.18)",
+      borderRadius: "999px",
+      bottom: "12px",
+      boxShadow: "0 2px 12px rgba(0, 0, 0, 0.35)",
+      color: "#f2f2f2",
+      display: "flex",
+      font: '500 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+      gap: "8px",
+      padding: "6px 10px",
+      position: "fixed",
+      right: "12px",
+      zIndex: "2147483647",
+    });
+
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.textContent = "\u{1F6E1}";
+    toggle.title = "Show or hide the proxy banner";
+    toggle.setAttribute("aria-label", toggle.title);
+    Object.assign(toggle.style, {
+      background: "none",
+      border: "none",
+      color: "inherit",
+      cursor: "pointer",
+      font: "inherit",
+      lineHeight: "1",
+      padding: "0",
+    });
+
+    const label = document.createElement("span");
+    label.textContent = proxyUser.length > 0 ? "Proxied \u00b7 " + proxyUser : "Proxied";
+
+    const signOut = document.createElement("button");
+    signOut.type = "button";
+    signOut.textContent = "Sign out";
+    signOut.title = "End the proxy session";
+    Object.assign(signOut.style, {
+      background: "rgba(255, 255, 255, 0.12)",
+      border: "1px solid rgba(255, 255, 255, 0.25)",
+      borderRadius: "999px",
+      color: "inherit",
+      cursor: "pointer",
+      font: "inherit",
+      padding: "2px 8px",
+      whiteSpace: "nowrap",
+    });
+    signOut.addEventListener("click", () => window.location.assign(signOutURL));
+
+    const render = () => {
+      const collapsed = isBannerCollapsed();
+      label.style.display = collapsed ? "none" : "";
+      signOut.style.display = collapsed ? "none" : "";
+      banner.style.opacity = collapsed ? "0.6" : "1";
+      banner.title = collapsed ? "Proxied session" : "";
+    };
+
+    toggle.addEventListener("click", () => {
+      setBannerCollapsed(!isBannerCollapsed());
+      render();
+    });
+
+    banner.append(toggle, label, signOut);
+    document.body.appendChild(banner);
+    render();
+  };
+
+  // threadIdFromPath returns the thread a path opens, or null if it opens none.
+  const threadIdFromPath = (path) => {
+    const match = threadPathPattern.exec(path || "");
+    return match ? match[1].toLowerCase() : null;
+  };
+
+  // applyThreadVisibility hides the list row of a thread this session does not own. The
+  // hiding is cosmetic: the proxy denies the request for a foreign thread either way, and
+  // this only keeps the sidebar from filling up with links that lead to the error page.
+  const applyThreadVisibility = (anchor) => {
+    if (!privateThreads) return;
+
+    let path;
+    try {
+      path = new URL(anchor.getAttribute("href"), window.location.href).pathname;
+    } catch (e) {
+      console.debug("Thread URL parsing failed:", e);
+      return;
+    }
+
+    const threadId = threadIdFromPath(path);
+    if (!threadId) return;
+
+    const row = anchor.closest('li, [role="listitem"]') || anchor;
+    if (ownedThreads.has(threadId)) {
+      row.style.removeProperty("display");
+      return;
+    }
+
+    row.style.display = "none";
+  };
 
   // replaceHost function replaces the host of the given URL with the proxy domain
   // and appends the proxy token if the original URL contains a token
@@ -170,6 +338,10 @@
   const processNode = (node) => {
     if (!(node instanceof Element)) return;
 
+    // The banner belongs to the proxy rather than to the page, so it is exempt from the
+    // rewriting and from the rules that disable elements.
+    if (node.id === bannerId || (node.closest && node.closest("#" + bannerId))) return;
+
     const patterns = forbiddenPaths.map((path) => new RegExp(path));
     const disableElement = (element) => {
       element.style.opacity = "0.6";
@@ -205,6 +377,10 @@
           disableElement(node);
           continue;
         }
+      }
+
+      if (node.tagName === "A" && node.hasAttribute("href")) {
+        applyThreadVisibility(node);
       }
     }
 
@@ -255,6 +431,10 @@
         }
       });
     });
+
+    // The application owns the body and re-creates it on navigation, which takes the
+    // banner with it.
+    mountBanner();
   });
 
   // Process existing content
@@ -265,6 +445,8 @@
     } catch (e) {
       console.debug("Error processing existing content:", e);
     }
+
+    mountBanner();
   };
 
   // Wait for DOM to be ready
@@ -431,12 +613,79 @@
     return new originalWebSocket(url, protocols);
   };
 
+  // originalHistory keeps the navigation methods the thread watcher wraps.
+  const originalHistory = {};
+
+  // claimThread tells the proxy that the thread the tab has just navigated to belongs to
+  // this session.
+  //
+  // The assistant creates a thread client side and only swaps the new URL in with
+  // history.pushState, so no request for it ever reaches the proxy. Without this report the
+  // proxy would not learn the id until the page is loaded again, and until then the thread
+  // the user is writing in would count as somebody else's and be hidden. A claim is refused
+  // for a thread another session already holds, so reporting one is not a way to reach it.
+  const claimThread = async (threadId) => {
+    if (!privateThreads || !threadId || ownedThreads.has(threadId)) return;
+
+    // Take ownership locally first, so that the row of the new thread is not hidden for as
+    // long as the request is in flight.
+    ownedThreads.add(threadId);
+
+    try {
+      const response = await originalFetch.call(window, threadClaimURL, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thread_id: threadId }),
+      });
+
+      if (!response.ok) {
+        ownedThreads.delete(threadId);
+        console.debug("Thread claim rejected:", response.status);
+      } else {
+        const payload = await response.json();
+        (payload.threads || []).forEach((id) =>
+          ownedThreads.add(String(id).toLowerCase())
+        );
+      }
+    } catch (e) {
+      ownedThreads.delete(threadId);
+      console.debug("Thread claim failed:", e);
+    }
+
+    processExistingContent();
+  };
+
+  // Watch the client-side navigation for the thread the tab is in.
+  const watchThreadNavigation = () => {
+    if (!privateThreads) return;
+
+    const claimCurrent = () => claimThread(threadIdFromPath(window.location.pathname));
+
+    for (const method of ["pushState", "replaceState"]) {
+      originalHistory[method] = history[method];
+      history[method] = function (...args) {
+        const result = originalHistory[method].apply(this, args);
+        claimCurrent();
+        return result;
+      };
+    }
+
+    window.addEventListener("popstate", claimCurrent);
+    claimCurrent();
+  };
+
+  watchThreadNavigation();
+
   const cleanup = () => {
     observer.disconnect();
     window.fetch = originalFetch;
     window.WebSocket = originalWebSocket;
     XMLHttpRequest.prototype.open = originalXHROpen;
     XMLHttpRequest.prototype.send = originalXHRSend;
+    for (const method of Object.keys(originalHistory)) {
+      history[method] = originalHistory[method];
+    }
   };
 
   window.addEventListener("unload", cleanup);

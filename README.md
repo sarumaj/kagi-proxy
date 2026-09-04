@@ -1,6 +1,9 @@
 # kagi-proxy
 
-Proxy service for [© kagi.com](https://kagi.com). © Kagi offers a **search engine** as payware which is less vigilantly subjected to questionable SEO practices. Furthermore, it offers **AI assistant** service. The **AI assistant** ships most recent available GPT solutions under one subscription, e.g.:
+Proxy service for [© kagi.com](https://kagi.com). © Kagi offers a
+**search engine** as payware which is less vigilantly subjected to questionable
+SEO practices. Furthermore, it offers **AI assistant** service. The **AI assistant**
+ships most recent available GPT solutions under one subscription, e.g.:
 
 - Anthropic: _Claude 3.5 Sonnet_
 - OpenAI: _GPT 4o_
@@ -9,7 +12,15 @@ Proxy service for [© kagi.com](https://kagi.com). © Kagi offers a **search eng
 
 Refer to [help.kagi.com](https://help.kagi.com) for more information.
 
-The subscription is around 25$ each month for both the unlimited search engine and AI assistant services. Family plan is provided as well, whereas the fee rounds up to 20$ base rate + 15$ for each member per month. More about pricing their official site: [kagi.com/pricing](https://kagi.com/pricing). I wrote a simple proxy service to make my personal © Kagi subscription shareable with my family only. I provide a reversed proxy behind TLS, basic authentication scheme, CSRF and DDoS protection by employing request throttling. I interfere with the kagi.com interface via DOM content mutation observation and JS injection to provide a seamless user experience.
+The subscription is around 25$ each month for both the unlimited search engine
+and AI assistant services. Family plan is provided as well, whereas the fee rounds
+up to 20$ base rate + 15$ for each member per month. More about pricing their
+official site: [kagi.com/pricing](https://kagi.com/pricing). I wrote a simple proxy
+service to make my personal © Kagi subscription shareable with my family only.
+I provide a reversed proxy behind TLS, basic authentication scheme, CSRF and DDoS
+protection by employing request throttling. I interfere with the kagi.com interface
+via DOM content mutation observation and JS injection to provide a seamless user
+experience.
 
 Proxy is exposed behind [kagi.sarumaj.com](https://kagi.sarumaj.com):
 
@@ -19,28 +30,46 @@ Proxy is exposed behind [kagi.sarumaj.com](https://kagi.sarumaj.com):
     </img></a>
 </p>
 
-In the case, you are interested to run the proxy yourself, you need to setup a VM in the cloud and configure DNS to support wildcard domains corresponding to `*.kagi.com` and `kagi.com`. The proxy web service is freely configurable via its CLI:
+Every proxy user shares one © Kagi account, so the assistant would otherwise list
+the threads of everybody behind the proxy to everybody else. The proxy therefore
+scopes them: a thread belongs to the proxy session that opened it first, which is
+the session that created it, its address is refused for anyone else, and the sidebar
+hides the rows that lead nowhere. Pass `-proxy-private-threads=false` to turn that
+off and go back to one shared thread history. A small badge in the corner of every
+proxied page names the session and offers a way to sign out of the proxy without
+ending the shared © Kagi session.
+
+In the case, you are interested to run the proxy yourself, you need to setup a VM
+in the cloud and configure DNS to support wildcard domains corresponding to
+`*.kagi.com` and `kagi.com`. The proxy web service is freely configurable via
+its CLI:
 
 ```bash
 Usage of kagi-proxy:
+  -ip2location-api-key string
+     API key for the IP2Location API
   -limit-burst uint
-        burst size for rate limiting (default 12)
+     burst size for rate limiting (default 12)
   -limit-rps float
-        requests per second for rate limiting (default 90)
+     requests per second for rate limiting (default 90)
   -port uint
-        port to listen on (default 8080)
+     port to listen on (default 8080)
   -proxy-extra-policy string
-        path to a JSON file with additional policy rules
+     path to a JSON file with additional policy rules, see https://github.com/sarumaj/kagi-proxy/tree/main/examples
   -proxy-host string
-        proxy domain (default "kagi.com")
+     proxy domain (default "kagi.com")
   -proxy-otp-secret string
-        OTP encryption secret for the proxy session (default "test")
+     OTP encryption secret for the proxy session (default "test")
   -proxy-pass string
-        proxy user password (default "pass")
+     proxy user password (default "pass")
+  -proxy-private-threads
+     scope assistant threads to the proxy session that created them (default true)
+  -proxy-session-duration duration
+     session duration for the proxy session (default 720h0m0s)
   -proxy-session-secret string
-        cookie encryption secret for the proxy session (default "test")
+     cookie encryption secret for the proxy session (default "test")
   -proxy-user string
-        proxy user (default "user")
+     proxy user (default "user")
   -session-token string
-        session token for the Kagi website
+     session token for the Kagi website
 ```

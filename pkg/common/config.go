@@ -13,6 +13,7 @@ const (
 	ip2locationApiKey     = "ip2locationApiKey"
 	proxyGuardPolicy      = "proxyGuardPolicy"
 	proxyPass             = "proxyPass"
+	proxyPrivateThreads   = "proxyPrivateThreads"
 	proxyOTPSecret        = "proxyOTPSecret"
 	proxyPublicDomains    = "proxyPublicDomains"
 	proxyRedirectLoginURL = "proxyRedirectLoginURL"
@@ -130,6 +131,10 @@ func ConfigProxyGuardPolicy() Policy { return configGet[Policy](proxyGuardPolicy
 // ConfigProxyPass returns the proxy password.
 func ConfigProxyPass() string { return configGet[string](proxyPass) }
 
+// ConfigProxyPrivateThreads reports whether assistant threads are scoped to the proxy
+// session that created them.
+func ConfigProxyPrivateThreads() bool { return configGet[bool](proxyPrivateThreads) }
+
 // ConfigProxyOTPSecret returns the proxy OTP secret.
 func ConfigProxyOTPSecret() string { return configGet[string](proxyOTPSecret) }
 
@@ -164,6 +169,10 @@ func SetProxyGuardPolicy(policy Policy) { config.Store(proxyGuardPolicy, policy)
 
 // SetProxyPass sets the proxy password.
 func SetProxyPass(pass string) { config.Store(proxyPass, pass) }
+
+// SetProxyPrivateThreads sets whether assistant threads are scoped to the proxy session
+// that created them.
+func SetProxyPrivateThreads(private bool) { config.Store(proxyPrivateThreads, private) }
 
 // SetProxyOTPSecret sets the proxy OTP secret.
 func SetProxyOTPSecret(secret string) { config.Store(proxyOTPSecret, secret) }
