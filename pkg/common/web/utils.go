@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -292,6 +293,63 @@ func ModifyCSP(csp string, scripts ...[]byte) string {
 	}
 
 	return strings.Join(modified, "; ")
+}
+
+// RewriteSetCookieDomains rewrites the Domain attribute of every Set-Cookie header on
+// the response so that cookies minted by a target host are accepted under the matching
+// proxy domain. Cookies whose Domain the proxy does not serve, and host-only cookies
+// (no Domain attribute), are left untouched.
+//
+// Cookies named in drop are removed from the response instead. Use it for cookies the
+// proxy manages itself: handing the target host's own copy to the client would let it
+// override what the director injects, and would distribute a shared credential to every
+// visitor's browser.
+func RewriteSetCookieDomains(resp *http.Response, drop ...string) {
+	values := resp.Header.Values("Set-Cookie")
+	if len(values) == 0 {
+		return
+	}
+
+	reversed := common.ConfigProxyTargetHosts().Reverse()
+	rewritten := make([]string, 0, len(values))
+	for _, value := range values {
+		attributes := strings.Split(value, ";")
+
+		if name, _, found := strings.Cut(strings.TrimSpace(attributes[0]), "="); found && slices.Contains(drop, name) {
+			common.Logger().Debug("Withholding upstream cookie from the client", zap.String("name", name))
+			continue
+		}
+
+		for i, attribute := range attributes {
+			key, domain, found := strings.Cut(strings.TrimSpace(attribute), "=")
+			if !found || !strings.EqualFold(key, "domain") {
+				continue
+			}
+
+			// A leading dot is legacy syntax but still emitted in the wild; it widens the
+			// cookie to subdomains, which the proxy domain must keep.
+			dotted := strings.HasPrefix(domain, ".")
+			proxyDomain, ok := reversed[strings.ToLower(strings.TrimPrefix(domain, "."))]
+			if !ok {
+				continue
+			}
+
+			if dotted {
+				proxyDomain = "." + proxyDomain
+			}
+
+			attributes[i] = " Domain=" + proxyDomain
+			common.Logger().Debug("Rewrote Set-Cookie domain",
+				zap.String("from", domain), zap.String("to", proxyDomain))
+		}
+
+		rewritten = append(rewritten, strings.Join(attributes, ";"))
+	}
+
+	resp.Header.Del("Set-Cookie")
+	for _, value := range rewritten {
+		resp.Header.Add("Set-Cookie", value)
+	}
 }
 
 // SessionSave saves the session and handles any errors that occur.

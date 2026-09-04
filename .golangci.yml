@@ -1,0 +1,12 @@
+version: "2"
+
+linters:
+  exclusions:
+    # golangci-lint v1 applied these exclusion sets by default; v2 made them opt-in.
+    # Listing them keeps the enforced rule set the same across the v1 to v2 move, so the
+    # upgrade does not turn pre-existing code red.
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling

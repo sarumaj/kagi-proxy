@@ -3,7 +3,7 @@ WORKDIR /usr/src/app
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify && \
     go install golang.org/x/tools/gopls@latest && \
-    go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+    go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 COPY . .
 RUN go generate ./... && \
     gofmt -s -d ./ && \
