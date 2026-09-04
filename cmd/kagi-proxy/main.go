@@ -123,13 +123,12 @@ func main() {
 	})
 	// Define the target hosts for the proxy. The key is the proxy host and the value is the target host.
 	// The target host is used to create the request URL and forward the request.
-	common.SetProxyTargetHosts(common.HostMap{
-		*proxyHost:                "kagi.com",
-		"assets." + *proxyHost:    "assets.kagi.com",
-		"help." + *proxyHost:      "help.kagi.com",
-		"status." + *proxyHost:    "status.kagi.com",
-		"translate." + *proxyHost: "translate.kagi.com",
-	})
+	//
+	// Only the base pair is needed: every subdomain of it is mirrored onto the same label
+	// of the target (assets, help, news, assistant, ...), so the map does not have to track
+	// what kagi.com happens to serve today. Add an entry here only to override that
+	// mirroring, when a proxy subdomain must reach a target that is not its counterpart.
+	common.SetProxyTargetHosts(common.HostMap{*proxyHost: "kagi.com"})
 	common.SetProxyUser(*proxyUser)       // Set the proxy user.
 	common.SetSessionToken(*sessionToken) // Set the session token for the Kagi website, will be delivered as a cookie.
 

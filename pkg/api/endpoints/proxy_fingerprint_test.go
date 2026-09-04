@@ -14,15 +14,15 @@ import (
 
 func setup() {
 	common.SetProxyTargetHosts(common.HostMap{
-		"kagi.sarumaj.com":        "kagi.com",
-		"assets.kagi.sarumaj.com": "assets.kagi.com",
+		"kagi.example.com":        "kagi.com",
+		"assets.kagi.example.com": "assets.kagi.com",
 	})
 	common.SetSessionToken("KAGITOKEN")
 	common.SetProxyGuardPolicy(common.Policy{})
 }
 
 // TestUpstreamRequestLooksDirect asserts that nothing identifying the hop survives
-// the director: no forwarded metadata, no proxy cookie, no synthesised Origin.
+// the director: no forwarded metadata, no proxy cookie, no synthesized Origin.
 func TestUpstreamRequestLooksDirect(t *testing.T) {
 	setup()
 
@@ -50,8 +50,8 @@ func TestUpstreamRequestLooksDirect(t *testing.T) {
 	defer front.Close()
 
 	req, _ := http.NewRequest(http.MethodGet, front.URL+"/search?q=cats", nil)
-	req.Host = "kagi.sarumaj.com"
-	req.Header.Set("Referer", "https://kagi.sarumaj.com/settings")
+	req.Host = "kagi.example.com"
+	req.Header.Set("Referer", "https://kagi.example.com/settings")
 	req.Header.Set("Cookie", "proxy_session=SECRETBLOB; theme=dark")
 	req.Header.Set("X-Request-Id", "heroku-abc")
 	req.Header.Set("X-Forwarded-Proto", "https")
@@ -90,7 +90,7 @@ func TestUpstreamRequestLooksDirect(t *testing.T) {
 	// the target host's own copy is withheld rather than re-scoped. See
 	// TestOwnerTokenSurvivesUpstreamSessionCookie.
 	want := map[string]bool{
-		"theme=dark; Path=/; Domain=.kagi.sarumaj.com": true,
+		"theme=dark; Path=/; Domain=.kagi.example.com": true,
 		"hostonly=1; Path=/":                           true,
 	}
 	for _, v := range resp.Header.Values("Set-Cookie") {
@@ -116,7 +116,7 @@ func TestRewriteURLHeaderKeepsThirdPartyOrigins(t *testing.T) {
 		t.Errorf("Referer = %q, want it untouched", got)
 	}
 
-	req.Header.Set("Origin", "https://assets.kagi.sarumaj.com")
+	req.Header.Set("Origin", "https://assets.kagi.example.com")
 	rewriteURLHeader(req, "Origin")
 	if got := req.Header.Get("Origin"); got != "https://assets.kagi.com" {
 		t.Errorf("Origin = %q, want https://assets.kagi.com", got)
@@ -125,7 +125,7 @@ func TestRewriteURLHeaderKeepsThirdPartyOrigins(t *testing.T) {
 
 // TestUpstreamSpeaksHTTP2 pins the transport to HTTP/2. Setting TLSClientConfig without
 // ForceAttemptHTTP2 silently drops the connection to HTTP/1.1, where Go emits
-// canonicalised, alphabetically sorted header names that no browser produces.
+// canonicalized, alphabetically sorted header names that no browser produces.
 func TestUpstreamSpeaksHTTP2(t *testing.T) {
 	upstream := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(r.Proto))
@@ -154,5 +154,73 @@ func TestUpstreamSpeaksHTTP2(t *testing.T) {
 
 	if resp.Proto != "HTTP/2.0" {
 		t.Errorf("negotiated %s, want HTTP/2.0", resp.Proto)
+	}
+}
+
+// TestUnlistedSubdomainsReachTheirOwnHost is the regression guard for subdomains missing
+// from the configured host map. They used to collapse onto the default host, so
+// news.kagi.example.com served kagi.com under the news name.
+func TestUnlistedSubdomainsReachTheirOwnHost(t *testing.T) {
+	setup()
+
+	for _, tt := range []struct {
+		host       string
+		wantHost   string
+		wantCookie string
+	}{
+		{host: "kagi.example.com", wantHost: "kagi.com", wantCookie: "kagi.example.com"},
+		{host: "assets.kagi.example.com", wantHost: "assets.kagi.com", wantCookie: "assets.kagi.example.com"},
+		{host: "news.kagi.example.com", wantHost: "news.kagi.com", wantCookie: "news.kagi.example.com"},
+		{host: "assistant.kagi.example.com", wantHost: "assistant.kagi.com", wantCookie: "assistant.kagi.example.com"},
+	} {
+		t.Run(tt.host, func(t *testing.T) {
+			var seen *http.Request
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				seen = r.Clone(r.Context())
+				w.Header().Add("Set-Cookie", "pref=1; Path=/; Domain="+tt.wantHost)
+				w.Header().Set("Content-Type", "text/plain")
+			}))
+			defer upstream.Close()
+
+			state := ProxyState{}
+			rp := &httputil.ReverseProxy{
+				Rewrite: func(pr *httputil.ProxyRequest) {
+					state.Director(pr.Out)
+					// Capture the host the director chose, then divert to the test upstream.
+					pr.Out.Header.Set("X-Test-Target", pr.Out.Host)
+					pr.Out.URL.Scheme, pr.Out.URL.Host = "http", strings.TrimPrefix(upstream.URL, "http://")
+				},
+				ModifyResponse: state.ModifyResponse,
+			}
+
+			front := httptest.NewServer(rp)
+			defer front.Close()
+
+			req, _ := http.NewRequest(http.MethodGet, front.URL+"/", nil)
+			req.Host = tt.host
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+
+			if seen == nil {
+				t.Fatal("upstream never received the request")
+			}
+			if got := seen.Header.Get("X-Test-Target"); got != tt.wantHost {
+				t.Errorf("proxied to %q, want %q", got, tt.wantHost)
+			}
+
+			var domain string
+			for _, cookie := range resp.Cookies() {
+				if cookie.Name == "pref" {
+					domain = cookie.Domain
+				}
+			}
+			if domain != tt.wantCookie {
+				t.Errorf("Set-Cookie Domain = %q, want %q", domain, tt.wantCookie)
+			}
+		})
 	}
 }

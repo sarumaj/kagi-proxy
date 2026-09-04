@@ -21,8 +21,8 @@ func TestSessionCookieScoping(t *testing.T) {
 	common.SetSessionToken("token")
 	common.SetProxySessionDuration(30 * 24 * time.Hour)
 	common.SetProxyTargetHosts(common.HostMap{
-		"kagi.sarumaj.com":        "kagi.com",
-		"assets.kagi.sarumaj.com": "assets.kagi.com",
+		"kagi.example.com":        "kagi.com",
+		"assets.kagi.example.com": "assets.kagi.com",
 	})
 
 	router := gin.New(func(e *gin.Engine) { e.Use(Session()) })
@@ -45,13 +45,13 @@ func TestSessionCookieScoping(t *testing.T) {
 	}{
 		{
 			name: "proxied apex keeps the shared domain",
-			host: "kagi.sarumaj.com", forwarded: "https",
-			wantDomain: "kagi.sarumaj.com", wantSecure: true,
+			host: "kagi.example.com", forwarded: "https",
+			wantDomain: "kagi.example.com", wantSecure: true,
 		},
 		{
 			name: "proxied subdomain shares the same session",
-			host: "assets.kagi.sarumaj.com", forwarded: "https",
-			wantDomain: "kagi.sarumaj.com", wantSecure: true,
+			host: "assets.kagi.example.com", forwarded: "https",
+			wantDomain: "kagi.example.com", wantSecure: true,
 		},
 		{
 			// Without this the cookie is dropped, every request starts a fresh session and

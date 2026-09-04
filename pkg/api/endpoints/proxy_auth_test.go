@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	proxyHost  = "kagi.sarumaj.com"
+	proxyHost  = "kagi.example.com"
 	ownerToken = "OWNER-SUBSCRIPTION-TOKEN"
 )
 

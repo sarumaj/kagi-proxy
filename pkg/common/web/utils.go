@@ -329,8 +329,11 @@ func RewriteSetCookieDomains(resp *http.Response, drop ...string) {
 			// A leading dot is legacy syntax but still emitted in the wild; it widens the
 			// cookie to subdomains, which the proxy domain must keep.
 			dotted := strings.HasPrefix(domain, ".")
-			proxyDomain, ok := reversed[strings.ToLower(strings.TrimPrefix(domain, "."))]
-			if !ok {
+			// Get, rather than a plain lookup, so that a cookie from a subdomain the map
+			// does not name (news, assistant, …) is re-scoped instead of left pointing at
+			// the target host, where the browser would discard it.
+			proxyDomain := reversed.Get(strings.ToLower(strings.TrimPrefix(domain, ".")), "")
+			if proxyDomain == "NXDOMAIN" {
 				continue
 			}
 

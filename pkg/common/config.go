@@ -1,6 +1,7 @@
 package common
 
 import (
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -67,6 +68,10 @@ func (t HostMap) Get(host, def string) string {
 		}
 	}
 
+	if mirrored, ok := t.mirror(host); ok {
+		return mirrored
+	}
+
 	Logger().Warn("Target host not found", zap.String("host", host), zap.Reflect("hosts", t))
 
 	if len(def) > 0 {
@@ -74,6 +79,31 @@ func (t HostMap) Get(host, def string) string {
 	}
 
 	return "NXDOMAIN"
+}
+
+// mirror maps a host that is a subdomain of the base host onto the same label under the
+// base host's counterpart, e.g. news.kagi.example.com onto news.kagi.com.
+func (t HostMap) mirror(host string) (string, bool) {
+	base := t.Base()
+	if len(base) == 0 {
+		return "", false
+	}
+
+	target, ok := t[base]
+	if !ok {
+		return "", false
+	}
+
+	if hostname, _, err := net.SplitHostPort(host); err == nil {
+		host = hostname
+	}
+
+	suffix := "." + strings.Split(base, ":")[0]
+	if !strings.HasSuffix(strings.ToLower(host), strings.ToLower(suffix)) {
+		return "", false
+	}
+
+	return strings.TrimSuffix(host, suffix) + "." + target, true
 }
 
 // Reverse returns the reversed hosts mapping.
