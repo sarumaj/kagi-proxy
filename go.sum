@@ -2,6 +2,8 @@ github.com/andybalholm/brotli v1.2.3 h1:8H1qwOkl2LPfjf3YezB90JnCliZb6SInJ/OJkEbA
 github.com/andybalholm/brotli v1.2.3/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/andybalholm/brotli v1.2.4 h1:649LN6qF+/7JJYNN3Wdu4Dt5PS6eC/yP/Go3Bb0/AHI=
 github.com/andybalholm/brotli v1.2.4/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
+github.com/andybalholm/brotli v1.2.5 h1:BSI8V4zmx/3BAn6OKjF1PmfVq7Aoi52AdFsi6bpCx+s=
+github.com/andybalholm/brotli v1.2.5/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/boj/redistore v0.0.0-20180917114910-cd5dcc76aeff/go.mod h1:+RTT1BOk5P97fT2CiHkbFQwkK3mjsFAP6zCYV2aXtjw=
 github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc/go.mod h1:paBWMcWSl3LHKBqUq+rly7CNSldXjb2rDl3JlRe0mD8=
 github.com/boombuler/barcode v1.1.0 h1:ChaYjBR63fr4LFyGn8E8nt7dBSt3MiU3zMOZqFvVkHo=
@@ -29,11 +31,15 @@ github.com/gin-contrib/cors v1.7.7 h1:Oh9joP463x7Mw72vhvJ61YQm8ODh9b04YR7vsOErD0
 github.com/gin-contrib/cors v1.7.7/go.mod h1:K5tW0RkzJtWSiOdikXloy8VEZlgdVNpHNw8FpjUPNrE=
 github.com/gin-contrib/cors v1.7.8 h1:U0jjyXlWXMEx27hFE6hmdg/TOZviYgsOGGT+kLmUZrc=
 github.com/gin-contrib/cors v1.7.8/go.mod h1:u3nLI2pP1IlJn7tbvL7iiubDO9quBZ8FXP9LxmqpsPI=
+github.com/gin-contrib/cors v1.7.9 h1:69rz5YU6PW7XlQ4VPXacl77ldFiUvR0E0bmEqmbq86w=
+github.com/gin-contrib/cors v1.7.9/go.mod h1:KTqiTA5HzlWPgVz7p4tolzAuptzGO7DEJn/CbklG0nU=
 github.com/gin-contrib/sessions v0.0.0-20190101140330-dc5246754963/go.mod h1:4lkInX8nHSR62NSmhXM3xtPeMSyfiR58NaEz+om1lHM=
 github.com/gin-contrib/sessions v1.1.0 h1:00mhHfNEGF5sP2fwxa98aRqj1FOJdL6IkR86n2hOiBo=
 github.com/gin-contrib/sessions v1.1.0/go.mod h1:TyYZDIs6qCQg2SOoYPgMT9pAkmZceVNEJMcv5qbIy60=
 github.com/gin-contrib/sessions v1.1.1 h1:/3ORwmsZ0h/Kcc9fekFrSSc6QXEifMscBLcS8lyQfqQ=
 github.com/gin-contrib/sessions v1.1.1/go.mod h1:h8ilnqzj7fPELlu4/rbFcZW/0SNYMXhm4X/KQv0i1G8=
+github.com/gin-contrib/sessions v1.1.2 h1:utWRqOHT/kbqxxqF/mtutV9wfGLi1+uu5YuvWUhj/Ow=
+github.com/gin-contrib/sessions v1.1.2/go.mod h1:qRxYwA/TYJw0wv28oFzs4gY/8G8z69id862SNgX9Gmw=
 github.com/gin-contrib/sse v0.0.0-20170109093832-22d885f9ecc7/go.mod h1:VJ0WA2NBN22VlZ2dKZQPAPnyWw5XTlK1KymzLKsr59s=
 github.com/gin-contrib/sse v1.1.1 h1:uGYpNwTacv5R68bSGMapo62iLTRa9l5zxGCps4hK6ko=
 github.com/gin-contrib/sse v1.1.1/go.mod h1:QXzuVkA0YO7o/gun03UI1Q+FTI8ZV/n5t03kIQAI89s=
@@ -41,6 +47,8 @@ github.com/gin-contrib/zap v1.1.7 h1:eORVNAKR5lT9irhF9yD7VCBgwrLv6+5zJjMfXryDBfo
 github.com/gin-contrib/zap v1.1.7/go.mod h1:bCR836S2tW8qYbisz97Sbw1C9UjDKbaUh30cS3cLPkw=
 github.com/gin-contrib/zap v1.1.8 h1:1OUgZj9IcEDUhwSwAermS0qesCL3UDcqB/jVYyUM/H0=
 github.com/gin-contrib/zap v1.1.8/go.mod h1:2RXm6SHx42zoxXo337YAcADYadyjPKjtPvPxgca0B/s=
+github.com/gin-contrib/zap v1.1.9 h1:n0PyOFy5kFpazKYHI2/SoatteYR3TvKFKEu5NUqXCSw=
+github.com/gin-contrib/zap v1.1.9/go.mod h1:Y7+fw7CEVHYScYrGh5HOa1bLQMSR9koQeKYmj9skQUE=
 github.com/gin-gonic/gin v1.3.0/go.mod h1:7cKuhb5qV2ggCFctp2fJQ+ErvciLZrIeoOSOm6mUr7Y=
 github.com/gin-gonic/gin v1.12.0 h1:b3YAbrZtnf8N//yjKeU2+MQsh2mY5htkZidOM7O0wG8=
 github.com/gin-gonic/gin v1.12.0/go.mod h1:VxccKfsSllpKshkBWgVgRniFFAzFb9csfngsqANjnLc=
@@ -84,6 +92,8 @@ github.com/json-iterator/go v1.1.12/go.mod h1:e30LSqwooZae/UwlEbR2852Gd8hjQvJoHm
 github.com/kidstuff/mongostore v0.0.0-20181113001930-e650cd85ee4b/go.mod h1:g2nVr8KZVXJSS97Jo8pJ0jgq29P6H7dG0oplUA86MQw=
 github.com/klauspost/compress v1.20.0 h1:a3C1ke2ohxFymNlb2HWAHjDeKCI90scRskErZkR0ezA=
 github.com/klauspost/compress v1.20.0/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
+github.com/klauspost/compress v1.20.1 h1:T7kKElXUMXrUJ2E9QhQhxFtcK5rPyLdsGZvdbLMPdiQ=
+github.com/klauspost/compress v1.20.1/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
 github.com/klauspost/cpuid/v2 v2.4.0 h1:S6Hrbc7+ywsr0r+RLapfGBHfyefhCTwEh3A0tV913Dw=
 github.com/klauspost/cpuid/v2 v2.4.0/go.mod h1:19jmZ9mjzoF//ddRSUsv0zfBTJWh3QJh9FNxZTMrGxU=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
