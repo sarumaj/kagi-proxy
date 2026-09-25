@@ -3,15 +3,15 @@ module github.com/sarumaj/kagi-proxy
 go 1.26.2
 
 require (
-	github.com/andybalholm/brotli v1.2.4
-	github.com/gin-contrib/cors v1.7.8
-	github.com/gin-contrib/sessions v1.1.1
-	github.com/gin-contrib/zap v1.1.8
+	github.com/andybalholm/brotli v1.2.5
+	github.com/gin-contrib/cors v1.7.9
+	github.com/gin-contrib/sessions v1.1.2
+	github.com/gin-contrib/zap v1.1.9
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/compress v1.20.1
 	github.com/pquerna/otp v1.5.0
 	github.com/refraction-networking/utls v1.8.2
 	github.com/utrack/gin-csrf v0.0.0-20190424104817-40fb8d2c8fca
