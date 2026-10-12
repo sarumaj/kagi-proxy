@@ -11,7 +11,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/hashicorp/golang-lru/v2 v2.0.7
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.3
 	github.com/pquerna/otp v1.5.0
 	github.com/refraction-networking/utls v1.8.2
 	github.com/utrack/gin-csrf v0.0.0-20190424104817-40fb8d2c8fca
