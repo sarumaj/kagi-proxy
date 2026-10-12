@@ -1,0 +1,79 @@
+# Converted from .github/workflows/deploy.yml for Forgejo by
+# scripts/github_to_forgejo.py (HomeLab); --move-ci rewrites it. Jobs needing
+# GitHub, macOS, Windows or secrets Forgejo lacks stay in the GitHub file.
+name: deploy_to_heroku
+'on':
+  push:
+    tags:
+    - v*
+jobs:
+  build_and_release:
+    strategy:
+      fail-fast: false
+      matrix:
+        go:
+        - 1.26
+        os:
+        - ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    name: Deploy Kagi Proxy to Heroku
+    steps:
+    - name: Check out repository
+      uses: https://github.com/actions/checkout@v7
+      with:
+        fetch-depth: 0
+    - name: Install go
+      uses: https://github.com/actions/setup-go@v7
+      with:
+        go-version: ${{ matrix.go }}
+    - name: Export Module Name
+      id: export_module_name
+      run: echo "MODULE_NAME=$(go mod edit -json | jq -r '.Module.Path')" >> "$GITHUB_OUTPUT"
+    - name: Install go tools
+      run: |
+        go install golang.org/x/tools/gopls@latest && \
+        go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+    - name: Run linters and tests
+      run: |
+        gofmt -s -d ./ && \
+        golangci-lint run -v --timeout 5m && \
+        go test -v -race ./...
+    - name: Install Heroku CLI
+      run: |
+        curl https://cli-assets.heroku.com/install.sh | sh
+    - name: Get app url
+      uses: https://github.com/akhileshns/heroku-deploy@v3.15.15
+      with:
+        heroku_api_key: ${{secrets.HEROKU_API_KEY}}
+        heroku_app_name: ''
+        heroku_email: ${{ secrets.HEROKU_USER_EMAIL }}
+        justlogin: true
+    - name: Export app config
+      id: export_app_config
+      run: |
+        HEROKU_APP_URL=$(heroku apps:info --app="${{ secrets.HEROKU_APP_NAME }}" --json | jq -r '.app.web_url | rtrimstr("/")')
+
+        cat <<EOF >> "$GITHUB_OUTPUT"
+        HEROKU_APP_URL=$HEROKU_APP_URL
+        EOF
+    - name: Deploy to Heroku
+      uses: https://github.com/akhileshns/heroku-deploy@v3.15.15
+      with:
+        heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
+        heroku_app_name: ${{ secrets.HEROKU_APP_NAME }}
+        heroku_email: ${{ secrets.HEROKU_USER_EMAIL }}
+        healthcheck: ${{ steps.export_app_config.outputs.HEROKU_APP_URL }}/health
+        rollbackonhealthcheckfailed: true
+        usedocker: true
+        delay: 5
+      env:
+        HD_KAGI_SESSION_TOKEN: ${{ secrets.KAGI_SESSION_TOKEN }}
+        HD_PROXY_SESSION_SECRET: ${{ secrets.PROXY_SESSION_SECRET }}
+        HD_PROXY_OTP_SECRET: ${{ secrets.PROXY_OTP_SECRET }}
+        HD_PROXY_USER: ${{ secrets.PROXY_USER }}
+        HD_PROXY_PASS: ${{ secrets.PROXY_PASS }}
+        HD_PROXY_HOST: ${{ secrets.PROXY_HOST }}
+        HD_PROXY_DEBUG: 'false'
+    - name: Update code documentation
+      run: curl -fsSL https://proxy.golang.org/${{ steps.export_module_name.outputs.MODULE_NAME }}/@v/${{
+        github.ref_name }}.info
