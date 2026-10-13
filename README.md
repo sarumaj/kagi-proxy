@@ -22,10 +22,10 @@ protection by employing request throttling. I interfere with the kagi.com interf
 via DOM content mutation observation and JS injection to provide a seamless user
 experience.
 
-Proxy is exposed behind [kagi.sarumaj.com](https://kagi.sarumaj.com):
+Proxy is exposed behind [kagi.apps.ciepiela.org](https://kagi.apps.ciepiela.org):
 
 <p align="center" width="100%">
-    <a href="https://kagi.sarumaj.com" target="_blank">
+    <a href="https://kagi.apps.ciepiela.org" target="_blank">
         <img src="doc/image.png" alt="screenshot">
     </img></a>
 </p>
