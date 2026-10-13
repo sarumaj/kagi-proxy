@@ -1,7 +1,7 @@
 # Converted from .github/workflows/deploy.yml for Forgejo by
 # scripts/github_to_forgejo.py (HomeLab); --move-ci rewrites it. Jobs needing
 # GitHub, macOS, Windows or secrets Forgejo lacks stay in the GitHub file.
-name: deploy_to_heroku
+name: deploy_to_apps
 'on':
   push:
     tags:
@@ -16,7 +16,7 @@ jobs:
         os:
         - ubuntu-latest
     runs-on: ${{ matrix.os }}
-    name: Deploy Kagi Proxy to Heroku
+    name: Deploy Kagi Proxy to apps
     steps:
     - name: Check out repository
       uses: https://github.com/actions/checkout@v7
@@ -38,35 +38,14 @@ jobs:
         gofmt -s -d ./ && \
         golangci-lint run -v --timeout 5m && \
         go test -v -race ./...
-    - name: Install Heroku CLI
-      run: |
-        curl https://cli-assets.heroku.com/install.sh | sh
-    - name: Get app url
-      uses: https://github.com/akhileshns/heroku-deploy@v3.15.15
-      with:
-        heroku_api_key: ${{secrets.HEROKU_API_KEY}}
-        heroku_app_name: ''
-        heroku_email: ${{ secrets.HEROKU_USER_EMAIL }}
-        justlogin: true
-    - name: Export app config
-      id: export_app_config
-      run: |
-        HEROKU_APP_URL=$(heroku apps:info --app="${{ secrets.HEROKU_APP_NAME }}" --json | jq -r '.app.web_url | rtrimstr("/")')
-
-        cat <<EOF >> "$GITHUB_OUTPUT"
-        HEROKU_APP_URL=$HEROKU_APP_URL
-        EOF
-    - name: Deploy to Heroku
-      uses: https://github.com/akhileshns/heroku-deploy@v3.15.15
-      with:
-        heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
-        heroku_app_name: ${{ secrets.HEROKU_APP_NAME }}
-        heroku_email: ${{ secrets.HEROKU_USER_EMAIL }}
-        healthcheck: ${{ steps.export_app_config.outputs.HEROKU_APP_URL }}/health
-        rollbackonhealthcheckfailed: true
-        usedocker: true
-        delay: 5
+    - name: Deploy to apps
+      shell: bash
       env:
+        APPS_URL: https://apps.ciepiela.org
+        APPS_TOKEN: ${{ secrets.APPS_TOKEN }}
+        APPS_APP: ${{ github.event.repository.name }}
+        APPS_HEALTHCHECK: /health
+        APPS_DELAY: '5'
         HD_KAGI_SESSION_TOKEN: ${{ secrets.KAGI_SESSION_TOKEN }}
         HD_PROXY_SESSION_SECRET: ${{ secrets.PROXY_SESSION_SECRET }}
         HD_PROXY_OTP_SECRET: ${{ secrets.PROXY_OTP_SECRET }}
@@ -74,6 +53,51 @@ jobs:
         HD_PROXY_PASS: ${{ secrets.PROXY_PASS }}
         HD_PROXY_HOST: ${{ secrets.PROXY_HOST }}
         HD_PROXY_DEBUG: 'false'
+      run: |
+        set -euo pipefail
+        api() {
+          curl -fsS --retry 3 -H "Authorization: Bearer $APPS_TOKEN" -H "Accept: application/json" "$@"
+        }
+        uuid=$(api "$APPS_URL/api/v1/applications" \
+          | jq -r --arg name "$APPS_APP" '[.[] | select(.name == $name)][0].uuid // empty')
+        if [ -z "$uuid" ]; then
+          echo "::error::The panel at $APPS_URL has no application named $APPS_APP."
+          exit 1
+        fi
+        # The configuration: HD_NAME becomes NAME; what is empty here keeps its value there.
+        vars=$(jq -n '[env | to_entries[] | select(.key | startswith("HD_")) | select(.value != "")
+          | {key: .key[3:], value, is_literal: true}]')
+        if [ "$vars" != "[]" ]; then
+          jq -n --argjson data "$vars" '{data: $data}' | api -X PATCH -H "Content-Type: application/json" \
+            -d @- "$APPS_URL/api/v1/applications/$uuid/envs/bulk" > /dev/null
+        fi
+        # The commit checked out here, also when it is not the branch's newest.
+        jq -n --arg sha "$(git rev-parse HEAD 2> /dev/null || echo "$GITHUB_SHA")" '{git_commit_sha: $sha}' \
+          | api -X PATCH -H "Content-Type: application/json" -d @- "$APPS_URL/api/v1/applications/$uuid" > /dev/null
+        deployment=$(api -X POST "$APPS_URL/api/v1/deploy?uuid=$uuid&force=true" \
+          | jq -r '.deployments[0].deployment_uuid')
+        echo "Deployment $deployment of $APPS_APP"
+        status=queued
+        for _ in $(seq 180); do
+          status=$(api "$APPS_URL/api/v1/deployments/$deployment" | jq -r .status)
+          case "$status" in
+            finished) break ;;
+            failed | cancelled-by-user)
+              echo "::error::The deployment ended as $status; its log is in the panel."
+              exit 1
+              ;;
+          esac
+          sleep 10
+        done
+        if [ "$status" != finished ]; then
+          echo "::error::The deployment did not finish within 30 minutes ($status)."
+          exit 1
+        fi
+        if [ -n "${APPS_HEALTHCHECK:-}" ]; then
+          address=$(api "$APPS_URL/api/v1/applications/$uuid" | jq -r '(.fqdn // "") | split(",")[0]')
+          sleep "${APPS_DELAY:-0}"
+          curl -fsS --retry 6 --retry-delay 10 --retry-all-errors -o /dev/null "$address$APPS_HEALTHCHECK"
+        fi
     - name: Update code documentation
       run: curl -fsSL https://proxy.golang.org/${{ steps.export_module_name.outputs.MODULE_NAME }}/@v/${{
         github.ref_name }}.info
