@@ -1,6 +1,6 @@
 module github.com/sarumaj/kagi-proxy
 
-go 1.26.2
+go 1.27.0
 
 require (
 	github.com/andybalholm/brotli v1.2.6

@@ -4,19 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"net"
 	"net/http"
-	"sync"
 	"time"
 
 	utls "github.com/refraction-networking/utls"
-	"golang.org/x/net/http2"
 )
-
-// errNoHTTP2 reports that the peer selected HTTP/1.1 during ALPN, so the request has
-// to be replayed over the HTTP/1.1 transport.
-var errNoHTTP2 = errors.New("peer did not negotiate http/2")
 
 type (
 	// BrowserTransport is an http.RoundTripper whose TLS ClientHello mimics Chrome.
@@ -27,63 +20,60 @@ type (
 	// handshake instead, so the connection fingerprints as the browser the User-Agent
 	// claims to be.
 	//
-	// A custom TLS dialer suppresses net/http's own HTTP/2 upgrade — it only inspects
-	// connection state when the dialer returns a *tls.Conn — so the two protocol
-	// versions are dispatched here explicitly. Both dialers offer the same Chrome ALPN
-	// list, so choosing between them never changes the handshake on the wire.
+	// net/http picks the protocol version per connection from the ALPN result the dialed
+	// connection reports, so one transport serves both HTTP/2 and HTTP/1.1 peers without
+	// the handshake on the wire depending on which of them is spoken afterwards.
 	BrowserTransport struct {
-		h1 *http.Transport
-		h2 *http2.Transport
-		// downgraded records hosts that answered ALPN with http/1.1, so that later
-		// requests skip the HTTP/2 attempt instead of paying for a failed dial.
-		downgraded sync.Map
+		*http.Transport
+	}
+
+	// browserConn makes the ALPN result of a utls handshake visible to net/http, which
+	// asks the dialed connection for a crypto/tls ConnectionState and cannot read the
+	// utls type of the same name.
+	browserConn struct {
+		*utls.UConn
 	}
 )
 
+// ConnectionState reports the negotiated protocol in the crypto/tls representation.
+func (c browserConn) ConnectionState() tls.ConnectionState {
+	state := c.UConn.ConnectionState()
+	return tls.ConnectionState{
+		Version:            state.Version,
+		HandshakeComplete:  state.HandshakeComplete,
+		DidResume:          state.DidResume,
+		CipherSuite:        state.CipherSuite,
+		NegotiatedProtocol: state.NegotiatedProtocol,
+		ServerName:         state.ServerName,
+		PeerCertificates:   state.PeerCertificates,
+		VerifiedChains:     state.VerifiedChains,
+	}
+}
+
 // NewBrowserTransport builds a transport that presents a Chrome TLS fingerprint and
-// prefers HTTP/2, falling back to HTTP/1.1 per host when the peer declines it.
+// speaks HTTP/2 or HTTP/1.1, whichever the peer selects during ALPN.
 func NewBrowserTransport(rootCAs *x509.CertPool) *BrowserTransport {
+	// A custom TLS dialer turns off HTTP/2 unless the protocols are named explicitly.
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetHTTP2(true)
+
 	return &BrowserTransport{
-		h1: &http.Transport{
+		Transport: &http.Transport{
 			DialTLSContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
-				return dialBrowserTLS(ctx, addr, rootCAs)
-			},
-			ForceAttemptHTTP2:   false,
-			MaxIdleConns:        100,
-			IdleConnTimeout:     90 * time.Second,
-			TLSHandshakeTimeout: 10 * time.Second,
-		},
-		h2: &http2.Transport{
-			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
 				conn, err := dialBrowserTLS(ctx, addr, rootCAs)
 				if err != nil {
 					return nil, err
 				}
 
-				if state := conn.ConnectionState(); state.NegotiatedProtocol != http2.NextProtoTLS {
-					_ = conn.Close()
-					return nil, errNoHTTP2
-				}
-
-				return conn, nil
+				return browserConn{UConn: conn}, nil
 			},
+			Protocols:           protocols,
+			MaxIdleConns:        100,
+			IdleConnTimeout:     90 * time.Second,
+			TLSHandshakeTimeout: 10 * time.Second,
 		},
 	}
-}
-
-// RoundTrip implements the http.RoundTripper interface for BrowserTransport.
-func (t *BrowserTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if _, downgraded := t.downgraded.Load(req.URL.Host); req.URL.Scheme != "https" || downgraded {
-		return t.h1.RoundTrip(req)
-	}
-
-	resp, err := t.h2.RoundTrip(req)
-	if errors.Is(err, errNoHTTP2) {
-		t.downgraded.Store(req.URL.Host, struct{}{})
-		return t.h1.RoundTrip(req)
-	}
-
-	return resp, err
 }
 
 // dialBrowserTLS opens a TCP connection and completes a Chrome-shaped TLS handshake.
