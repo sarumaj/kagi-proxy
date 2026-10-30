@@ -3,7 +3,7 @@ module github.com/sarumaj/kagi-proxy
 go 1.27.0
 
 require (
-	github.com/andybalholm/brotli v1.2.6
+	github.com/andybalholm/brotli v1.2.7
 	github.com/gin-contrib/cors v1.7.9
 	github.com/gin-contrib/sessions v1.1.2
 	github.com/gin-contrib/zap v1.1.9
