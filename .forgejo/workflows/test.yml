@@ -1,0 +1,31 @@
+# The tests of every change: pushes to main and to renovate/all-patch, where Renovate's
+# patches merge from once this passes (no ignoreTests in renovate.json), and pull requests.
+name: Test
+# A failed job mails whoever started the run. Renovate's bot has no mailbox: when its
+# branch fails, Renovate opens a pull request, which mails the repository's watchers.
+enable-email-notifications: true
+'on':
+  push:
+    branches:
+    - main
+    - renovate/all-patch
+  pull_request: null
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out repository
+      uses: https://github.com/actions/checkout@v7
+    - name: Install go
+      uses: https://github.com/actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+    - name: Install go tools
+      run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+    # gofmt -l lists what is not formatted; -d alone would show it and still succeed.
+    - name: Run linters
+      run: |
+        test -z "$(gofmt -s -l .)" || { gofmt -s -d .; exit 1; }
+        golangci-lint run -v --timeout 5m
+    - name: Run tests
+      run: go test -race ./...
