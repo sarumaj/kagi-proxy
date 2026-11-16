@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. The release bot
 writes each version's section from the commits (Conventional Commits) and the hand-written
 Unreleased section.
 
+## 0.0.26 - 2026-11-16
+
+### Dependencies
+
+- update module github.com/klauspost/compress to v1.20.4
+- update all patch dependencies
+- update module golang.org/x/net to v0.62.0 [security] (#49)
+
 ## 0.0.25 - 2026-11-09
 
 ### Dependencies
