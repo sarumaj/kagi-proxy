@@ -27,5 +27,16 @@ jobs:
       run: |
         test -z "$(gofmt -s -l .)" || { gofmt -s -d .; exit 1; }
         golangci-lint run -v --timeout 5m
+    # As JSON with the coverage, for the report below, which also prints the failed
+    # tests' output.
     - name: Run tests
-      run: go test -race ./...
+      id: tests
+      run: go test -race -json -coverprofile=/tmp/cover.out ./... > /tmp/go-test.json
+    # The results and the coverage as one comment on the pull request
+    # (dawid/ci-actions), also when tests failed.
+    - name: Test report
+      if: always() && steps.tests.outcome != 'skipped'
+      uses: https://git.ciepiela.org/dawid/ci-actions/test-report@main
+      with:
+        go-test-json: /tmp/go-test.json
+        coverage: /tmp/cover.out
